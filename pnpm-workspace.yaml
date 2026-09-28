@@ -1,0 +1,7 @@
+packages:
+  - .
+overrides:
+  browserslist: 4.28.0
+allowBuilds:
+  esbuild: true
+  core-js: false

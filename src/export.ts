@@ -1,0 +1,106 @@
+import resumeCSS from './resume.css?raw';
+import { embeddedFontCSS } from './fonts';
+import { download } from './storage';
+
+function pagesRoot() {
+  const root = document.querySelector('#resume-pages');
+  if (!root || root.closest('[data-ready]')?.getAttribute('data-ready') !== 'true')
+    throw new Error('正在排版，请稍后再导出');
+  return root as HTMLElement;
+}
+async function prepare() {
+  const deadline = performance.now() + 10_000;
+  // Opening export refreshes manual/debounced previews. Wait for that layout commit.
+  while (
+    document.querySelector('#resume-pages')?.parentElement?.getAttribute('data-ready') !== 'true'
+  ) {
+    if (performance.now() > deadline) throw new Error('字体或排版尚未就绪，请检查资源后重试');
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  }
+  const root = pagesRoot();
+  await document.fonts.ready;
+  await Promise.all(Array.from(root.querySelectorAll('img')).map((img) => img.decode()));
+  if (
+    Array.from(root.querySelectorAll<HTMLElement>('.resume-content')).some(
+      (el) => el.offsetHeight > 994,
+    )
+  ) {
+    throw new Error('内容超出页面，请拆分模块或减小字号后导出');
+  }
+  return root;
+}
+export function safeFilename(name: string) {
+  return (name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || '我的简历').slice(0, 100);
+}
+export async function exportHTML(name: string) {
+  const root = await prepare(),
+    fonts = await embeddedFontCSS();
+  const container = root.parentElement!.cloneNode(false) as HTMLElement;
+  container.removeAttribute('data-ready');
+  container.append(root.cloneNode(true));
+  const title = document.createElement('span');
+  title.textContent = name;
+  const html = `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>${title.innerHTML}</title><style>${fonts}\n${resumeCSS}\nbody{margin:0;background:#ededeb;padding:24px 0}.resume-page{max-width:none}@media print{body{padding:0}.resume-page{margin:0;box-shadow:none;break-after:page}.resume-page:last-child{break-after:auto}}</style></head><body>${container.outerHTML}</body></html>`;
+  download(new Blob([html], { type: 'text/html;charset=utf-8' }), `${safeFilename(name)}.html`);
+}
+/** Capture one A4 page at a time, limiting peak canvas memory and preserving the page boundaries. */
+export async function exportPDF(name: string, progress: (value: string) => void) {
+  const root = await prepare();
+  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+    import('html2canvas'),
+    import('jspdf'),
+  ]);
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+  // Clone the exact preview DOM outside zoomed/scrolling ancestors. Resetting zoom
+  // inside html2canvas's clone is too late: later-page capture offsets can drift.
+  const staging = root.parentElement!.cloneNode(false) as HTMLElement;
+  staging.style.position = 'absolute';
+  staging.style.left = '-10000px';
+  staging.style.top = '0';
+  staging.style.width = '794px';
+  staging.setAttribute('aria-hidden', 'true');
+  const copy = root.cloneNode(true) as HTMLElement;
+  copy.removeAttribute('id');
+  staging.append(copy);
+  document.body.append(staging);
+  try {
+    await Promise.all(Array.from(staging.querySelectorAll('img')).map((img) => img.decode()));
+    const pages = Array.from(staging.querySelectorAll<HTMLElement>('.resume-page'));
+    for (let i = 0; i < pages.length; i++) {
+      progress(`正在生成第 ${i + 1} / ${pages.length} 页…`);
+      const canvas = await html2canvas(pages[i], {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        logging: false,
+        useCORS: false,
+        width: 794,
+        height: 1122,
+        windowWidth: 1440,
+        windowHeight: 1200,
+      });
+      if (i) pdf.addPage();
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 210, 297, undefined, 'FAST');
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    pdf.setProperties({ title: name, creator: 'Folio Resume Studio' });
+    pdf.save(`${safeFilename(name)}.pdf`);
+  } finally {
+    staging.remove();
+  }
+}
+export async function printResume() {
+  const root = await prepare();
+  const host = document.createElement('div');
+  host.className = 'print-root';
+  const wrapper = root.parentElement!.cloneNode(false) as HTMLElement;
+  wrapper.append(root.cloneNode(true));
+  host.append(wrapper);
+  document.body.append(host);
+  try {
+    await document.fonts.ready;
+    window.print();
+  } finally {
+    host.remove();
+  }
+}
