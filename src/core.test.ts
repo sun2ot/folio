@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { markdown } from './markdown';
 import {
   applyTemplate,
+  createInfoField,
   createModule,
   documentSchema,
+  infoFieldPresets,
   moveModule,
   sample,
   fitPlacement,
@@ -37,6 +39,7 @@ describe('数据协议', () => {
     expect(parseImport(JSON.stringify(sample))).toEqual(sample);
   });
   it('拒绝未来版本、危险图片、重复 id 与字段', () => {
+    expect(documentSchema.safeParse({ ...sample, version: 5 }).success).toBe(false);
     expect(documentSchema.safeParse({ ...sample, version: 3 }).success).toBe(false);
     expect(documentSchema.safeParse({ ...sample, version: 1 }).success).toBe(false);
     expect(
@@ -50,8 +53,85 @@ describe('数据协议', () => {
         .success,
     ).toBe(false);
     expect(
-      documentSchema.safeParse({ ...sample, theme: { ...sample.theme, accent: 'red;}' } }).success,
+      documentSchema.safeParse({ ...sample, theme: { ...sample.theme, textColor: 'red;}' } })
+        .success,
     ).toBe(false);
+  });
+  it('基本信息字段可改名、换图标、增删排序，并校验重复 ID 与颜色', () => {
+    const fields = sample.profile.fields;
+    expect(fields.map((f) => f.id)).toEqual(infoFieldPresets.map((preset) => preset.key));
+    // 示例故意把预设「出生日期」改成「生日」，证明标签不是固定枚举。
+    expect(fields.find((f) => f.id === 'birthDate')?.label).toBe('生日');
+    expect(
+      documentSchema.safeParse({
+        ...sample,
+        profile: { ...sample.profile, fields: [fields[0], fields[0]] },
+      }).success,
+    ).toBe(false);
+    expect(
+      documentSchema.safeParse({
+        ...sample,
+        profile: { ...sample.profile, fields: [{ ...fields[0], icon: 'phone' }] },
+      }).success,
+    ).toBe(true);
+    expect(
+      documentSchema.safeParse({
+        ...sample,
+        profile: { ...sample.profile, fields: [{ ...fields[0], icon: 'nope' }] },
+      }).success,
+    ).toBe(false);
+    expect(
+      documentSchema.safeParse({
+        ...sample,
+        profile: { ...sample.profile, fields: [{ ...fields[0], label: '' }] },
+      }).success,
+    ).toBe(false);
+    expect(
+      documentSchema.safeParse({
+        ...sample,
+        profile: { ...sample.profile, fields: [{ ...fields[0], value: 'x'.repeat(201) }] },
+      }).success,
+    ).toBe(false);
+    const custom = createInfoField({ label: '生日', icon: 'calendar' });
+    expect(custom).toMatchObject({ label: '生日', icon: 'calendar', value: '' });
+    expect(custom.id).toMatch(/^[\w-]{1,80}$/);
+    expect(createInfoField().icon).toBe('star');
+    expect(
+      documentSchema.safeParse({
+        ...sample,
+        profile: { ...sample.profile, nameColor: '#123456' },
+      }).success,
+    ).toBe(true);
+    expect(
+      documentSchema.safeParse({
+        ...sample,
+        profile: { ...sample.profile, nameColor: '#12345' },
+      }).success,
+    ).toBe(false);
+    const styled = {
+      ...sample,
+      modules: [
+        {
+          ...sample.modules[0],
+          titleStyle: { font: 'sans', size: 15, color: '#2f6b4f' },
+          bodyStyle: { font: 'sans', size: 12, color: 'not-a-color' },
+        },
+        ...sample.modules.slice(1),
+      ],
+    };
+    expect(documentSchema.safeParse(styled).success).toBe(false);
+    expect(
+      documentSchema.safeParse({
+        ...styled,
+        modules: [
+          {
+            ...styled.modules[0],
+            bodyStyle: { font: 'sans', size: 12, color: '' },
+          },
+          ...sample.modules.slice(1),
+        ],
+      }).success,
+    ).toBe(true);
   });
   it('切换模板保留全部内容，拖动只改变顺序', () => {
     const next = applyTemplate(sample, 'compact');

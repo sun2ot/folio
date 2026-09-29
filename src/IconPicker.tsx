@@ -12,15 +12,27 @@ const labels: Record<Module['icon'], string> = {
   award: '荣誉',
   link: '链接',
   star: '星标',
+  phone: '电话',
+  mail: '邮箱',
+  globe: '网站',
+  github: 'GitHub',
+  calendar: '日期',
+  flag: '政治面貌',
+  contact: '联系',
+  clock: '时间',
+  map: '地点',
 };
+export const iconLabels = labels;
 
 /** Native select options cannot reliably render SVG; keep the same icons as the resume. */
 export function IconPicker({
   value,
   onChange,
+  label = '标题图标',
 }: {
   value: Module['icon'];
   onChange: (value: Module['icon']) => void;
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null),
@@ -79,7 +91,7 @@ export function IconPicker({
         ref={trigger}
         type="button"
         className="icon-picker-trigger"
-        aria-label={`标题图标：${labels[value]}`}
+        aria-label={`${label}：${labels[value]}`}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
@@ -99,7 +111,7 @@ export function IconPicker({
         <div
           id={menuId}
           role="listbox"
-          aria-label="标题图标选项"
+          aria-label={`${label}选项`}
           className="icon-picker-menu"
           onKeyDown={navigate}
         >

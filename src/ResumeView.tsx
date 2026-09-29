@@ -19,16 +19,18 @@ import {
 } from 'lucide-react';
 import {
   fontFamilies,
-  profileFields,
   fitPlacement,
+  type IconId,
   type Placement,
   type Resume,
   type Module,
 } from './model';
 import { markdown } from './markdown';
+import { repositoryURL } from './repository';
 import { rowsFor, paginate, type Row } from './pagination';
 
-const iconMap = {
+const iconMap: Record<IconId, typeof UserRound | null> = {
+  none: null,
   user: UserRound,
   briefcase: BriefcaseBusiness,
   graduation: GraduationCap,
@@ -36,25 +38,30 @@ const iconMap = {
   award: Award,
   link: Link,
   star: Star,
-};
-const contactIcons = {
   phone: Phone,
-  email: Mail,
-  gender: UserRound,
+  mail: Mail,
+  globe: Globe,
   github: Github,
-  website: Globe,
-  ethnicity: ContactRound,
-  birthDate: CalendarDays,
-  politicalStatus: Flag,
-  hometown: MapPin,
-  residence: MapPin,
-  location: MapPin,
-  experienceYears: Clock,
+  calendar: CalendarDays,
+  flag: Flag,
+  contact: ContactRound,
+  clock: Clock,
+  map: MapPin,
 };
-export function SectionIcon({ name, size = 16 }: { name: Module['icon']; size?: number }) {
-  if (name === 'none') return null;
+export function SectionIcon({
+  name,
+  size = 16,
+  color,
+}: {
+  name: IconId;
+  size?: number;
+  color?: string;
+}) {
   const Icon = iconMap[name];
-  return <Icon size={size} strokeWidth={1.7} aria-hidden="true" />;
+  if (!Icon) return null;
+  return (
+    <Icon size={size} strokeWidth={1.7} aria-hidden="true" style={color ? { color } : undefined} />
+  );
 }
 export function Avatar({ profile }: { profile: Resume['profile'] }) {
   if (!profile.photo) return null;
@@ -84,40 +91,49 @@ const Profile = memo(function Profile({ doc }: { doc: Resume }) {
         {doc.pageDecoration.headerVisible && (
           <div className="resume-eyebrow">{doc.pageDecoration.headerText}</div>
         )}
-        <h1>{p.name || '你的姓名'}</h1>
+        <h1 style={p.nameColor ? { color: p.nameColor } : undefined}>{p.name || '你的姓名'}</h1>
         <p className="resume-role">{p.role}</p>
         <div
           className="resume-contact"
           style={{ gridTemplateColumns: `repeat(${p.columns}, minmax(0, 1fr))` }}
         >
-          {profileFields
-            .filter(([key]) => p[key])
-            .map(([key, label]) => {
-              const Icon = contactIcons[key];
-              return (
-                <div className="resume-contact-item" key={key}>
-                  <Icon size={13} aria-hidden="true" />
-                  <span>
-                    {label}：{p[key]}
-                  </span>
-                </div>
-              );
-            })}
+          {p.fields
+            .filter((field) => field.value)
+            .map((field) => (
+              <div className="resume-contact-item" key={field.id}>
+                <SectionIcon name={field.icon} size={13} />
+                <span>
+                  {field.label}：{field.value}
+                </span>
+              </div>
+            ))}
         </div>
       </div>
     </header>
   );
 });
 const Block = memo(function Block({ item }: { item: Module }) {
+  const title = item.titleStyle.color || undefined;
   return (
     <section className="resume-section" data-module={item.id}>
       <h2
-        style={{ fontFamily: fontFamilies[item.titleStyle.font], fontSize: item.titleStyle.size }}
+        style={{
+          fontFamily: fontFamilies[item.titleStyle.font],
+          fontSize: item.titleStyle.size,
+          color: title,
+        }}
       >
-        <SectionIcon name={item.icon} />
+        <SectionIcon name={item.icon} color={title} />
         <span>{item.title}</span>
       </h2>
-      <div style={{ fontFamily: fontFamilies[item.bodyStyle.font], fontSize: item.bodyStyle.size }}>
+      <div
+        className="resume-body"
+        style={{
+          fontFamily: fontFamilies[item.bodyStyle.font],
+          fontSize: item.bodyStyle.size,
+          color: item.bodyStyle.color || undefined,
+        }}
+      >
         {item.kind === 'text' ? (
           <div className="markdown" dangerouslySetInnerHTML={{ __html: markdown(item.body) }} />
         ) : (
@@ -153,6 +169,43 @@ const Block = memo(function Block({ item }: { item: Module }) {
                   className="markdown"
                   dangerouslySetInnerHTML={{ __html: markdown(entry.body) }}
                 />
+                {item.kind === 'projects' && entry.github.visible && entry.github.snapshot && (
+                  <a
+                    className="resume-repository"
+                    href={repositoryURL(entry.github.snapshot)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <div className="repository-title">
+                      {entry.github.snapshot.avatar ? (
+                        <img
+                          className="repository-avatar"
+                          src={entry.github.snapshot.avatar}
+                          alt=""
+                          draggable={false}
+                        />
+                      ) : (
+                        <Github size={16} aria-hidden="true" />
+                      )}
+                      <strong>{entry.github.snapshot.name}</strong>
+                      <span>作者：{entry.github.snapshot.owner}</span>
+                    </div>
+                    {entry.github.snapshot.description && (
+                      <p>{entry.github.snapshot.description}</p>
+                    )}
+                    <div className="repository-stats">
+                      {entry.github.snapshot.language && (
+                        <span>{entry.github.snapshot.language}</span>
+                      )}
+                      {entry.github.snapshot.stars !== null && (
+                        <span>★ {entry.github.snapshot.stars.toLocaleString('en-US')} Star</span>
+                      )}
+                      {entry.github.snapshot.forks !== null && (
+                        <span>{entry.github.snapshot.forks.toLocaleString('en-US')} Fork</span>
+                      )}
+                    </div>
+                  </a>
+                )}
               </div>
             );
           })
@@ -184,9 +237,13 @@ function FloatingMedia({
 }) {
   const p = doc.media[kind];
   const [draft, setDraft] = useState<Placement | null>(null);
-  const drag = useRef<{ offsetX: number; offsetY: number; scale: number; next: Placement } | null>(
-    null,
-  );
+  const drag = useRef<{
+    offsetX: number;
+    offsetY: number;
+    scale: number;
+    next: Placement;
+    axis: 'x' | 'y' | null;
+  } | null>(null);
   const name = kind === 'photo' ? '头像' : '二维码';
   const position = draft || p;
   return (
@@ -196,7 +253,7 @@ function FloatingMedia({
       role="button"
       tabIndex={0}
       aria-label={`移动${name}`}
-      title="拖动定位；方向键微调，Shift 加速"
+      title="Shift + 拖动锁定水平或垂直方向；方向键移动 1 px，Shift + 方向键移动 10 px"
       style={{ left: position.left, top: position.top, width: p.size, height: p.size }}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
@@ -210,6 +267,7 @@ function FloatingMedia({
           offsetY: (e.clientY - rect.top) / scale,
           scale,
           next: p,
+          axis: null,
         };
         onDragging(p.page);
       }}
@@ -217,10 +275,22 @@ function FloatingMedia({
         const d = drag.current;
         if (!d) return;
         const origin = e.currentTarget.closest('.resume-page')!.getBoundingClientRect();
+        let clientX = e.clientX,
+          clientY = e.clientY;
+        const anchorX = origin.left + (p.left + d.offsetX) * d.scale;
+        const anchorY = origin.top + (p.top + d.offsetY) * d.scale;
+        if (e.shiftKey) {
+          const dx = clientX - anchorX,
+            dy = clientY - anchorY;
+          if (!d.axis && Math.max(Math.abs(dx), Math.abs(dy)) >= 2)
+            d.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+          if (d.axis === 'x') clientY = anchorY;
+          if (d.axis === 'y') clientX = anchorX;
+        } else d.axis = null;
         const relativeTo = (rect: DOMRect) => ({
           ...p,
-          left: (e.clientX - rect.left) / d.scale - d.offsetX,
-          top: (e.clientY - rect.top) / d.scale - d.offsetY,
+          left: (clientX - rect.left) / d.scale - d.offsetX,
+          top: (clientY - rect.top) / d.scale - d.offsetY,
         });
         setDraft(relativeTo(origin));
         const pages = Array.from(
@@ -228,12 +298,7 @@ function FloatingMedia({
         );
         const target = pages.findIndex((page) => {
           const r = page.getBoundingClientRect();
-          return (
-            e.clientX >= r.left &&
-            e.clientX <= r.right &&
-            e.clientY >= r.top &&
-            e.clientY <= r.bottom
-          );
+          return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
         });
         if (target >= 0 && target + 1 !== p.page) {
           const rect = pages[target].getBoundingClientRect();
@@ -311,6 +376,8 @@ export function ResumeView({
     setReady(false);
     setResourceError('');
     const run = async () => {
+      const root = measure.current;
+      if (!root || !live) return;
       const families = new Set([
         doc.theme.font,
         ...doc.modules
@@ -318,11 +385,12 @@ export function ResumeView({
           .flatMap((m) => [m.titleStyle.font, m.bodyStyle.font]),
       ]);
       await Promise.all(
-        [...families].map((font) => document.fonts.load(`12px ${fontFamilies[font]}`)),
+        [...families].map((font) =>
+          document.fonts.load(`12px ${fontFamilies[font]}`, root.textContent || ' '),
+        ),
       );
       await document.fonts.ready;
-      const root = measure.current;
-      if (!root || !live) return;
+      if (!live) return;
       await Promise.all(
         Array.from(root.parentElement!.querySelectorAll('img')).map((img) => img.decode()),
       );
@@ -352,7 +420,7 @@ export function ResumeView({
     };
   }, [doc, onReady]);
   const style = {
-    '--accent': doc.theme.accent,
+    '--text-color': doc.theme.textColor,
     '--section-gap': `${doc.theme.spacing}px`,
     fontFamily: fontFamilies[doc.theme.font],
   } as CSSProperties;

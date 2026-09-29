@@ -1,4 +1,4 @@
-import { useRef, type ChangeEvent } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import {
   Bold,
   Italic,
@@ -6,24 +6,28 @@ import {
   Code,
   List,
   ListOrdered,
+  Plus,
   Upload,
   ImagePlus,
 } from 'lucide-react';
 import {
   componentRegistry,
   fonts,
-  profileFields,
+  infoFieldPresets,
+  createInfoField,
   entryFields,
   createEntry,
   fitPlacement,
   type Placement,
   type Entry,
+  type InfoField,
   type Resume,
   type Module,
   type FontId,
 } from './model';
 import { IconPicker } from './IconPicker';
-import { Avatar } from './ResumeView';
+import { Avatar, SectionIcon } from './ResumeView';
+import { RepositoryEditor } from './RepositoryEditor';
 import { readImage, loadDefaultAvatar } from './storage';
 
 function MarkdownEditor({
@@ -117,7 +121,10 @@ export function MediaEditor({
     <div className="editor-fields">
       <div className="panel-intro">
         <h2>图片自由布局</h2>
-        <p>在预览中拖动头像或二维码，方向键微调，Shift + 方向键移动 10 px。也可填写页码和坐标。</p>
+        <p>
+          Shift + 拖动锁定水平或垂直方向。方向键移动 1 px，Shift + 方向键移动 10
+          px。也可填写页码和坐标。
+        </p>
       </div>
       <div className="qr-upload">
         {doc.media.qr.image && <img src={doc.media.qr.image} alt="已上传的二维码" />}
@@ -232,6 +239,42 @@ export function FontSelect({
     </select>
   );
 }
+/** 空值表示继承上一级颜色；“跟随全局”按钮把颜色清回继承状态。 */
+export function ColorField({
+  label,
+  value,
+  onChange,
+  fallback,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  fallback?: string;
+}) {
+  return (
+    <div className="field">
+      <span>{label}</span>
+      <div className="color-field">
+        <input
+          type="color"
+          aria-label={`${label}取色`}
+          value={value || fallback || '#000000'}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <span className="color-value">{value || '跟随全局'}</span>
+        {value && (
+          <button
+            className="text-button"
+            aria-label={`${label}恢复跟随全局`}
+            onClick={() => onChange('')}
+          >
+            跟随全局
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 export function ProfileEditor({
   profile,
   onChange,
@@ -243,6 +286,7 @@ export function ProfileEditor({
 }) {
   const file = useRef<HTMLInputElement>(null),
     drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
+  const [adding, setAdding] = useState(false);
   const patch = (p: Partial<Resume['profile']>) => onChange({ ...profile, ...p });
   const upload = async (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -372,23 +416,138 @@ export function ProfileEditor({
           <p className="hint">拖动头像或使用滑块调整取景。</p>
         </div>
       )}
-      {(
-        [
-          ['name', '姓名', '你的姓名'],
-          ['role', '求职意向', '职位 / 职业方向'],
-          ...profileFields.map(([key, label]) => [key, label, '留空则不显示'] as const),
-        ] as const
-      ).map(([key, label, placeholder]) => (
-        <label className="field" key={key}>
-          <span>{label}</span>
+      <div className="field-row">
+        <label className="field">
+          <span>姓名</span>
           <input
             maxLength={200}
-            value={profile[key]}
-            placeholder={placeholder}
-            onChange={(e) => patch({ [key]: e.target.value })}
+            value={profile.name}
+            placeholder="你的姓名"
+            onChange={(e) => patch({ name: e.target.value })}
           />
         </label>
-      ))}
+        <ColorField
+          label="姓名颜色"
+          value={profile.nameColor}
+          onChange={(nameColor) => patch({ nameColor })}
+        />{' '}
+      </div>
+      <label className="field">
+        <span>求职意向</span>
+        <input
+          maxLength={200}
+          value={profile.role}
+          placeholder="职位 / 职业方向"
+          onChange={(e) => patch({ role: e.target.value })}
+        />
+      </label>
+      <div className="info-fields">
+        <div className="label-line">
+          <span>信息字段</span>
+          <span className="tag">{profile.fields.length} 项</span>
+        </div>
+        {profile.fields.map((field, i) => {
+          const change = (values: Partial<InfoField>) =>
+            patch({
+              fields: profile.fields.map((f) => (f.id === field.id ? { ...f, ...values } : f)),
+            });
+          const move = (direction: number) => {
+            const fields = [...profile.fields];
+            [fields[i], fields[i + direction]] = [fields[i + direction], fields[i]];
+            patch({ fields });
+          };
+          return (
+            <fieldset className="info-field" key={field.id}>
+              <legend>第 {i + 1} 项</legend>
+              <div className="info-field-head">
+                <label className="field">
+                  <span>字段名称</span>
+                  <input
+                    maxLength={60}
+                    aria-label={`第 ${i + 1} 项字段名称`}
+                    value={field.label}
+                    onChange={(e) => change({ label: e.target.value })}
+                  />
+                </label>
+                <div className="field">
+                  <span>字段图标</span>
+                  <IconPicker
+                    label={`第 ${i + 1} 项图标`}
+                    value={field.icon}
+                    onChange={(icon) => change({ icon })}
+                  />
+                </div>
+              </div>
+              <label className="field">
+                <span>字段内容</span>
+                <input
+                  maxLength={200}
+                  aria-label={`第 ${i + 1} 项字段内容`}
+                  value={field.value}
+                  placeholder="留空则不显示"
+                  onChange={(e) => change({ value: e.target.value })}
+                />
+              </label>
+              <div className="entry-actions">
+                <button
+                  className="small-button"
+                  disabled={i === 0}
+                  aria-label={`上移第 ${i + 1} 项信息字段`}
+                  onClick={() => move(-1)}
+                >
+                  上移
+                </button>
+                <button
+                  className="small-button"
+                  disabled={i === profile.fields.length - 1}
+                  aria-label={`下移第 ${i + 1} 项信息字段`}
+                  onClick={() => move(1)}
+                >
+                  下移
+                </button>
+                <button
+                  className="small-button danger"
+                  aria-label={`删除第 ${i + 1} 项信息字段`}
+                  onClick={() => patch({ fields: profile.fields.filter((f) => f.id !== field.id) })}
+                >
+                  删除
+                </button>
+              </div>
+            </fieldset>
+          );
+        })}
+        <div className="add-area">
+          <button className="add-module" onClick={() => setAdding(!adding)}>
+            <Plus size={16} />
+            插入信息字段
+          </button>
+          {adding && (
+            <div className="component-menu">
+              {infoFieldPresets.map((preset) => (
+                <button
+                  key={preset.key}
+                  onClick={() => {
+                    patch({ fields: [...profile.fields, createInfoField(preset)] });
+                    setAdding(false);
+                  }}
+                >
+                  <SectionIcon name={preset.icon} size={14} />
+                  {preset.label}
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  patch({ fields: [...profile.fields, createInfoField()] });
+                  setAdding(false);
+                }}
+              >
+                <Plus size={14} />
+                空白字段
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
       <label className="field">
         <span>信息列数</span>
         <select value={profile.columns} onChange={(e) => patch({ columns: +e.target.value })}>
@@ -409,7 +568,9 @@ export function ProfileEditor({
           onChange={(e) => patch({ infoWidth: +e.target.value })}
         />
       </label>
-      <p className="hint">所有非空信息均带固定图标。缩窄信息区域可为浮动图片留白。</p>
+      <p className="hint">
+        预设字段可改名、换图标、删除或插入；留空的信息不会出现在简历上。缩窄信息区域可为浮动图片留白。
+      </p>
     </div>
   );
 }
@@ -512,6 +673,12 @@ export function ModuleEditor({ item, onChange }: { item: Module; onChange: (m: M
                   value={entry.body}
                   onChange={(body) => change({ body })}
                 />
+                {item.kind === 'projects' && (
+                  <RepositoryEditor
+                    value={entry.github}
+                    onChange={(github) => change({ github })}
+                  />
+                )}
                 <div className="entry-actions">
                   <button
                     className="small-button"
@@ -574,6 +741,11 @@ export function ModuleEditor({ item, onChange }: { item: Module; onChange: (m: M
                 ))}
               </select>
             </div>
+            <ColorField
+              label={`${i === 0 ? '标题' : '正文'}颜色`}
+              value={item[key].color}
+              onChange={(color) => patch({ [key]: { ...item[key], color } })}
+            />
           </div>
         ))}
         <label className="check-field">

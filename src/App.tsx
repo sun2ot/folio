@@ -24,6 +24,8 @@ import {
   Trash2,
   Minus,
   PanelLeftClose,
+  Github,
+  Globe,
 } from 'lucide-react';
 import {
   applyTemplate,
@@ -353,6 +355,26 @@ export default function App() {
             拖动模块调整顺序
           </p>
           <div className="sidebar-bottom">
+            <div className="author-links">
+              <a
+                href="https://github.com/sun2ot/folio"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="GitHub 仓库，作者 sun2ot"
+              >
+                <Github size={17} aria-hidden="true" />
+                <span>sun2ot 作者</span>
+              </a>
+              <a
+                href="https://abdc.net.cn"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="sun2ot 的博客 abdc.net.cn"
+              >
+                <Globe size={17} aria-hidden="true" />
+                <span>博客</span>
+              </a>
+            </div>
             <div className="privacy-icon">
               <ShieldCheck size={19} />
             </div>
@@ -465,28 +487,37 @@ export default function App() {
                 <p>A4 标准纸张 · 统一预览与导出排版</p>
               </div>
               <div className="field">
-                <span>主题色</span>
+                <span>主题色（姓名、模块标题与正文的默认颜色）</span>
                 <div className="swatches">
-                  {['#315b50', '#2c466b', '#343434', '#7d4651', '#866339', '#61517c'].map(
-                    (color) => (
-                      <button
-                        key={color}
-                        aria-label={`主题色 ${color}`}
-                        className={doc.theme.accent === color ? 'active' : ''}
-                        style={{ background: color }}
-                        onClick={() => patchTheme({ accent: color })}
-                      >
-                        {doc.theme.accent === color && <Check size={15} />}
-                      </button>
-                    ),
-                  )}
+                  {[
+                    '#25332f',
+                    '#315b50',
+                    '#2c466b',
+                    '#343434',
+                    '#7d4651',
+                    '#866339',
+                    '#61517c',
+                  ].map((color) => (
+                    <button
+                      key={color}
+                      aria-label={`主题色 ${color}`}
+                      className={doc.theme.textColor === color ? 'active' : ''}
+                      style={{ background: color }}
+                      onClick={() => patchTheme({ textColor: color })}
+                    >
+                      {doc.theme.textColor === color && <Check size={15} />}
+                    </button>
+                  ))}
                   <input
                     aria-label="自定义主题色"
                     type="color"
-                    value={doc.theme.accent}
-                    onChange={(e) => patchTheme({ accent: e.target.value })}
+                    value={doc.theme.textColor}
+                    onChange={(e) => patchTheme({ textColor: e.target.value })}
                   />
                 </div>
+                <p className="hint">
+                  模块与基本信息里的单独颜色会覆盖这里；未单独设置的元素跟随主题色。
+                </p>
               </div>
               <label className="field">
                 <span>姓名与个人信息字体</span>
@@ -495,7 +526,7 @@ export default function App() {
                   value={doc.theme.font}
                   onChange={(font) => patchTheme({ font })}
                 />
-              </label>
+              </label>{' '}
               <label className="field">
                 <span>模块间距 · {doc.theme.spacing} px</span>
                 <input
@@ -550,7 +581,10 @@ export default function App() {
                   中文：思源黑体、思源宋体
                   <br />
                   英文：Inter、Source Serif 4<br />
-                  离线 HTML 内嵌字体与图片。粗体及斜体由浏览器合成。
+                  浏览器按 unicode-range 只取需要的分片；
+                  <br />
+                  离线 HTML
+                  也只内嵌正文真正用到的分片与图片，不会打包整套字体。粗体及斜体由浏览器合成。
                 </p>
               </div>
             </div>

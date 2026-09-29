@@ -1,12 +1,14 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { sample, profileFields } from '../src/model';
+import { icons, sample } from '../src/model';
+import { iconLabels } from '../src/IconPicker';
+import { openApp } from './helpers';
+
+const iconLabelOf = (icon: (typeof icons)[number]) => iconLabels[icon];
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
-  await expect(page.getByText('已保存在此浏览器')).toBeVisible();
-  await expect(page.locator('.resume-document')).toHaveAttribute('data-ready', 'true');
+  await openApp(page);
 });
 
 test('品牌图标与默认头像、移除后刷新、显式恢复', async ({ page }) => {
@@ -97,8 +99,27 @@ test('图标菜单可预览、键盘选择并同步到简历', async ({ page }, 
   const picker = page.getByRole('button', { name: /标题图标：/ });
   await picker.click();
   const menu = page.getByRole('listbox', { name: '标题图标选项' });
-  await expect(menu.getByRole('option')).toHaveCount(8);
-  for (const name of ['无图标', '个人', '工作', '教育', '代码', '荣誉', '链接', '星标']) {
+  // 图标集同时供模块标题与基本信息字段使用，新增预设图标会扩展这个列表。
+  await expect(menu.getByRole('option')).toHaveCount(icons.length);
+  for (const name of [
+    '无图标',
+    '个人',
+    '工作',
+    '教育',
+    '代码',
+    '荣誉',
+    '链接',
+    '星标',
+    '电话',
+    '邮箱',
+    '网站',
+    'GitHub',
+    '日期',
+    '政治面貌',
+    '联系',
+    '时间',
+    '地点',
+  ]) {
     await expect(
       menu.getByRole('option', { name, exact: true }).locator('svg').first(),
     ).toBeAttached();
@@ -113,7 +134,8 @@ test('图标菜单可预览、键盘选择并同步到简历', async ({ page }, 
   await expect(menu.getByRole('option', { name: '代码', exact: true })).toBeFocused();
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');
-  await expect(picker).toHaveAccessibleName('标题图标：星标');
+  // End 跳到图标集最后一项。
+  await expect(picker).toHaveAccessibleName(`标题图标：${iconLabelOf(icons[icons.length - 1])}`);
   await picker.click();
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
@@ -306,13 +328,13 @@ test('导入校验、独立字体、三模板排版和多页导出', async ({ pa
 });
 
 test('多字段图标、长链接与经历左右 / 左中右布局', async ({ page }, testInfo) => {
-  for (const [key, label] of profileFields) {
+  for (const [i, field] of sample.profile.fields.entries()) {
     await page
-      .getByLabel(label, { exact: true })
+      .getByLabel(`第 ${i + 1} 项字段内容`)
       .fill(
-        key === 'website'
+        field.id === 'website'
           ? 'https://portfolio.example.test/' + 'long-path-'.repeat(12)
-          : `${label}示例`,
+          : `${field.label}示例`,
       );
   }
   await page.getByLabel('信息列数').selectOption('3');

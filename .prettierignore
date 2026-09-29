@@ -5,3 +5,5 @@ playwright-report
 .local
 pnpm-lock.yaml
 public/licenses
+# 外部会话/导出记录，不属于项目源码，不应参与格式检查。
+codex-session-*.md

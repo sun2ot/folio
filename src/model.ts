@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { repositorySchema } from './repository';
 
 export const fontIds = ['sans', 'serif', 'inter', 'source'] as const;
 export const fonts = {
@@ -22,22 +23,33 @@ export const icons = [
   'award',
   'link',
   'star',
+  'phone',
+  'mail',
+  'globe',
+  'github',
+  'calendar',
+  'flag',
+  'contact',
+  'clock',
+  'map',
 ] as const;
 export const kinds = ['text', 'experience', 'projects', 'education'] as const;
-export const profileFields = [
-  ['phone', '联系电话'],
-  ['email', '电子邮箱'],
-  ['gender', '性别'],
-  ['github', 'GitHub'],
-  ['website', '个人网站'],
-  ['ethnicity', '民族'],
-  ['birthDate', '出生日期'],
-  ['politicalStatus', '政治面貌'],
-  ['hometown', '籍贯'],
-  ['residence', '户籍'],
-  ['location', '所在城市'],
-  ['experienceYears', '工作年限'],
-] as const;
+export type IconId = (typeof icons)[number];
+/** 基本信息字段是可编辑列表，这里只提供预设：标签与图标都随文档保存。 */
+export const infoFieldPresets = [
+  { key: 'phone', label: '联系电话', icon: 'phone' },
+  { key: 'email', label: '电子邮箱', icon: 'mail' },
+  { key: 'gender', label: '性别', icon: 'user' },
+  { key: 'github', label: 'GitHub', icon: 'github' },
+  { key: 'website', label: '个人网站', icon: 'globe' },
+  { key: 'ethnicity', label: '民族', icon: 'contact' },
+  { key: 'birthDate', label: '出生日期', icon: 'calendar' },
+  { key: 'politicalStatus', label: '政治面貌', icon: 'flag' },
+  { key: 'hometown', label: '籍贯', icon: 'map' },
+  { key: 'residence', label: '户籍', icon: 'map' },
+  { key: 'location', label: '所在城市', icon: 'map' },
+  { key: 'experienceYears', label: '工作年限', icon: 'clock' },
+] as const satisfies readonly { key: string; label: string; icon: IconId }[];
 const short = z.string().max(200);
 const image = z
   .string()
@@ -46,7 +58,13 @@ const image = z
     (v) => v === '' || /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v),
     '仅接受本地 PNG / JPEG / WebP 图片',
   );
-const typography = z.object({ font: z.enum(fontIds), size: z.number().min(9).max(30) });
+/** 空字符串表示沿用上一级颜色（模块继承全局，全局继承默认墨色）。 */
+const color = z.union([z.literal(''), z.string().regex(/^#[0-9a-fA-F]{6}$/)]);
+const typography = z.object({
+  font: z.enum(fontIds),
+  size: z.number().min(9).max(30),
+  color,
+});
 const identifier = z.string().regex(/^[\w-]{1,80}$/);
 export const placementSchema = z
   .object({
@@ -78,6 +96,7 @@ const entrySchema = z.object({
   start: short,
   end: short,
   body: z.string().max(30_000),
+  github: z.object({ visible: z.boolean(), snapshot: repositorySchema.nullable() }),
 });
 export type Entry = z.infer<typeof entrySchema>;
 export const entryFields = {
@@ -111,10 +130,26 @@ export function createEntry(): Entry {
     start: '',
     end: '',
     body: '',
+    github: { visible: false, snapshot: null },
+  };
+}
+const infoFieldSchema = z.object({
+  id: identifier,
+  label: z.string().min(1).max(60),
+  value: short,
+  icon: z.enum(icons),
+});
+export type InfoField = z.infer<typeof infoFieldSchema>;
+export function createInfoField(preset?: { label: string; icon: IconId }): InfoField {
+  return {
+    id: crypto.randomUUID(),
+    label: preset?.label ?? '新字段',
+    value: '',
+    icon: preset?.icon ?? 'star',
   };
 }
 export const moduleSchema = z.object({
-  id: z.string().regex(/^[\w-]{1,80}$/),
+  id: identifier,
   field: z.string().regex(/^[\w.-]{1,80}$/),
   kind: z.enum(kinds),
   title: short,
@@ -130,23 +165,13 @@ export const moduleSchema = z.object({
 });
 export const documentSchema = z
   .object({
-    version: z.literal(2),
+    version: z.literal(4),
     name: short,
     profile: z.object({
       name: short,
+      nameColor: color,
       role: short,
-      email: short,
-      phone: short,
-      location: short,
-      website: short,
-      gender: short,
-      github: short,
-      ethnicity: short,
-      birthDate: short,
-      politicalStatus: short,
-      hometown: short,
-      residence: short,
-      experienceYears: short,
+      fields: z.array(infoFieldSchema).max(30),
       columns: z.number().int().min(1).max(3),
       infoWidth: z.number().min(280).max(678),
       photo: image,
@@ -169,13 +194,19 @@ export const documentSchema = z
     }),
     theme: z.object({
       template: z.enum(['editorial', 'classic', 'compact']),
-      accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+      textColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
       font: z.enum(fontIds),
       spacing: z.number().min(8).max(28),
     }),
     modules: z.array(moduleSchema).min(1).max(80),
   })
   .superRefine((doc, ctx) => {
+    if (new Set(doc.profile.fields.map((f) => f.id)).size !== doc.profile.fields.length)
+      ctx.addIssue({
+        code: 'custom',
+        message: '信息字段 ID 不可重复',
+        path: ['profile', 'fields'],
+      });
     if (new Set(doc.modules.map((m) => m.id)).size !== doc.modules.length)
       ctx.addIssue({ code: 'custom', message: '模块 ID 不可重复', path: ['modules'] });
     if (new Set(doc.modules.map((m) => m.field)).size !== doc.modules.length)
@@ -222,8 +253,8 @@ export function createModule(kind: Module['kind'], id: string = crypto.randomUUI
           : kind === 'projects'
             ? 'code'
             : 'star',
-    titleStyle: { font: 'sans', size: 15 },
-    bodyStyle: { font: 'sans', size: 12 },
+    titleStyle: { font: 'sans', size: 15, color: '' },
+    bodyStyle: { font: 'sans', size: 12, color: '' },
     width: 'full',
     visible: true,
     pageBreak: false,
@@ -238,24 +269,27 @@ const section = (id: string, title: string, icon: Module['icon'], body: string):
   icon,
   body,
 });
+/** 示例里的“生日”故意与预设标签「出生日期」不同，用来演示标签可自由改名。 */
+const sampleInfo: Record<string, string> = {
+  phone: '138 0000 0000',
+  email: 'hello@example.com',
+  birthDate: '1996.08',
+  location: '上海',
+  website: 'portfolio.example.com',
+};
 export const sample: Resume = {
-  version: 2,
+  version: 4,
   name: '伊云程 · 产品设计师',
   profile: {
     name: '伊云程',
+    nameColor: '',
     role: '产品设计师 / Product Designer',
-    email: 'hello@example.com',
-    phone: '138 0000 0000',
-    location: '上海',
-    website: 'portfolio.example.com',
-    gender: '',
-    github: '',
-    ethnicity: '',
-    birthDate: '',
-    politicalStatus: '',
-    hometown: '',
-    residence: '',
-    experienceYears: '',
+    fields: infoFieldPresets.map((preset) => ({
+      id: preset.key,
+      label: preset.key === 'birthDate' ? '生日' : preset.label,
+      icon: preset.icon,
+      value: sampleInfo[preset.key] ?? '',
+    })),
     columns: 2,
     infoWidth: 530,
     photo: '',
@@ -276,7 +310,7 @@ export const sample: Resume = {
     pageNumberVisible: true,
     pageNumberFormat: '{page} / {pages}',
   },
-  theme: { template: 'editorial', accent: '#315b50', font: 'sans', spacing: 18 },
+  theme: { template: 'editorial', textColor: '#25332f', font: 'sans', spacing: 18 },
   modules: [
     section(
       'summary',

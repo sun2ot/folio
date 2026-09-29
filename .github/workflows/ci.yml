@@ -1,5 +1,14 @@
-name: Quality
-on: [push, pull_request]
+name: Quality and Release
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: folio-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -13,11 +22,48 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: pnpm format:check
+      - name: Cache public repository cards for offline use
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        run: pnpm snapshot:github
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          name: folio-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: browser-test-results
           path: test-results/
+  release:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: folio-dist
+          path: dist/
+      - name: Package static site
+        run: |
+          (cd dist && zip -r ../folio-dist.zip .)
+          tar -czf folio-dist.tar.gz -C dist .
+          sha256sum folio-dist.zip folio-dist.tar.gz > SHA256SUMS
+      - name: Publish release for the tested commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: build-${{ github.run_number }}-${{ github.run_attempt }}
+        run: |
+          gh release create "$TAG" folio-dist.zip folio-dist.tar.gz SHA256SUMS \
+            --target "$GITHUB_SHA" --title "Folio $TAG" --generate-notes --latest

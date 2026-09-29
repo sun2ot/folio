@@ -42,7 +42,7 @@ function copyPages(root: HTMLElement) {
 }
 export async function exportHTML(name: string) {
   const root = await prepare(),
-    fonts = await embeddedFontCSS();
+    fonts = await embeddedFontCSS(root);
   const container = root.parentElement!.cloneNode(false) as HTMLElement;
   container.removeAttribute('data-ready');
   container.append(copyPages(root));
