@@ -32,11 +32,12 @@ import {
   moveModule,
   type Resume,
   type Module,
+  type Placement,
 } from './model';
 import { useResume } from './useResume';
 import { download, parseImport } from './storage';
 import { ResumeView, SectionIcon } from './ResumeView';
-import { FontSelect, ModuleEditor, ProfileEditor } from './Editor';
+import { FontSelect, MediaEditor, ModuleEditor, ProfileEditor } from './Editor';
 
 type Tab = 'content' | 'templates' | 'design';
 export default function App() {
@@ -83,6 +84,15 @@ export default function App() {
     );
   const patchTheme = (theme: Partial<Resume['theme']>) =>
     update((p) => ({ ...p, theme: { ...p.theme, ...theme } }));
+  const moveMedia = (kind: 'photo' | 'qr', placement: Placement) => {
+    update((p) => {
+      const next = { ...p, media: { ...p.media, [kind]: { ...p.media[kind], ...placement } } };
+      setPreview(next);
+      return next;
+    });
+  };
+  const patchDecoration = (values: Partial<Resume['pageDecoration']>) =>
+    update((p) => ({ ...p, pageDecoration: { ...p.pageDecoration, ...values } }), true);
   const select = (id: string) => {
     setSelected(id);
     setTab('content');
@@ -149,10 +159,8 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <a className="brand" href="./" aria-label="Folio 首页">
-          <span className="brand-mark">
-            <FileText size={20} />
-          </span>
-          folio<span className="brand-dot">.</span>
+          <img className="brand-mark" src={`${import.meta.env.BASE_URL}folio.svg`} alt="" />
+          Folio<span className="brand-dot">.</span>
         </a>
         <span className="header-divider" />
         <div className="document-name">
@@ -262,6 +270,13 @@ export default function App() {
             <span>基本信息</span>
             <Check size={13} />
           </button>
+          <button
+            className={`module-item profile-item ${selected === 'media' && tab === 'content' ? 'selected' : ''}`}
+            onClick={() => select('media')}
+          >
+            <Settings2 size={17} />
+            <span>头像与二维码</span>
+          </button>
           <div className="module-list">
             {doc.modules.map((m, i) => (
               <div
@@ -367,7 +382,13 @@ export default function App() {
             </button>
           </div>
           {tab === 'content' &&
-            (selected === 'profile' || !item ? (
+            (selected === 'media' ? (
+              <MediaEditor
+                doc={doc}
+                onChange={(media) => update((p) => ({ ...p, media }))}
+                notify={notify}
+              />
+            ) : selected === 'profile' || !item ? (
               <ProfileEditor
                 profile={doc.profile}
                 onChange={(profile) => update((p) => ({ ...p, profile }), true)}
@@ -375,12 +396,7 @@ export default function App() {
               />
             ) : (
               <>
-                <ModuleEditor
-                  key={item.id}
-                  item={item}
-                  onChange={(m) => changeModule(m, true)}
-                  notify={notify}
-                />
+                <ModuleEditor key={item.id} item={item} onChange={(m) => changeModule(m, true)} />
                 <button
                   className="delete-button"
                   disabled={doc.modules.length <= 1}
@@ -490,6 +506,39 @@ export default function App() {
                   onChange={(e) => patchTheme({ spacing: +e.target.value })}
                 />
               </label>
+              <details className="style-details" open>
+                <summary>页眉与页脚</summary>
+                {(
+                  [
+                    ['headerVisible', '显示页眉', 'headerText', '页眉内容', 200],
+                    ['footerVisible', '显示页脚标识', 'footerText', '页脚标识 / ID', 100],
+                    ['pageNumberVisible', '显示页码', 'pageNumberFormat', '页码格式', 60],
+                  ] as const
+                ).map(([visible, label, key, contentLabel, max]) => (
+                  <div key={key}>
+                    <label className="check-field">
+                      <input
+                        type="checkbox"
+                        checked={doc.pageDecoration[visible]}
+                        onChange={(e) => patchDecoration({ [visible]: e.target.checked })}
+                      />
+                      {label}
+                    </label>
+                    <label className="field">
+                      <span>{contentLabel}</span>
+                      <input
+                        maxLength={max}
+                        value={doc.pageDecoration[key]}
+                        onChange={(e) => patchDecoration({ [key]: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                ))}
+                <p className="hint">
+                  页码格式可使用 {'{page}'} 表示当前页、{'{pages}'} 表示总页数，例如「第 {'{page}'}{' '}
+                  页 / 共 {'{pages}'} 页」。
+                </p>
+              </details>
               <div className="tip-card">
                 <Sparkles size={18} />
                 <h3>让内容自然呼吸</h3>
@@ -566,7 +615,12 @@ export default function App() {
               <span>点击页面模块即可编辑</span>
             </div>
             <div className="preview-scale" style={{ zoom }}>
-              <ResumeView doc={preview} onReady={onReady} onSelect={select} />
+              <ResumeView
+                doc={preview}
+                onReady={onReady}
+                onSelect={select}
+                onMoveMedia={moveMedia}
+              />
             </div>
             <div className="preview-bottom">
               <CheckCheck size={14} />

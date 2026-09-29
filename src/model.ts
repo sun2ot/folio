@@ -23,7 +23,21 @@ export const icons = [
   'link',
   'star',
 ] as const;
-export const kinds = ['text', 'ordered', 'unordered', 'nested', 'qr'] as const;
+export const kinds = ['text', 'experience', 'projects', 'education'] as const;
+export const profileFields = [
+  ['phone', '联系电话'],
+  ['email', '电子邮箱'],
+  ['gender', '性别'],
+  ['github', 'GitHub'],
+  ['website', '个人网站'],
+  ['ethnicity', '民族'],
+  ['birthDate', '出生日期'],
+  ['politicalStatus', '政治面貌'],
+  ['hometown', '籍贯'],
+  ['residence', '户籍'],
+  ['location', '所在城市'],
+  ['experienceYears', '工作年限'],
+] as const;
 const short = z.string().max(200);
 const image = z
   .string()
@@ -33,6 +47,72 @@ const image = z
     '仅接受本地 PNG / JPEG / WebP 图片',
   );
 const typography = z.object({ font: z.enum(fontIds), size: z.number().min(9).max(30) });
+const identifier = z.string().regex(/^[\w-]{1,80}$/);
+export const placementSchema = z
+  .object({
+    page: z.number().int().min(1).max(80),
+    left: z.number().int().min(0).max(794),
+    top: z.number().int().min(0).max(1122),
+    size: z.number().int().min(40).max(300),
+    visible: z.boolean(),
+  })
+  .refine((p) => p.left + p.size <= 794 && p.top + p.size <= 1122, '图片必须完整位于纸张内');
+export type Placement = z.infer<typeof placementSchema>;
+export function fitPlacement(p: Placement): Placement {
+  const size = Math.round(Math.max(40, Math.min(300, p.size)));
+  return {
+    ...p,
+    size,
+    left: Math.round(Math.max(0, Math.min(794 - size, p.left))),
+    top: Math.round(Math.max(0, Math.min(1122 - size, p.top))),
+  };
+}
+const entrySchema = z.object({
+  id: identifier,
+  organization: short,
+  role: short,
+  location: short,
+  degree: short,
+  major: short,
+  studyMode: short,
+  start: short,
+  end: short,
+  body: z.string().max(30_000),
+});
+export type Entry = z.infer<typeof entrySchema>;
+export const entryFields = {
+  experience: [
+    ['organization', '公司 / 单位'],
+    ['role', '职位 / 角色'],
+    ['location', '工作地点'],
+  ],
+  projects: [
+    ['organization', '项目名称'],
+    ['role', '项目角色'],
+    ['location', '项目地点'],
+  ],
+  education: [
+    ['organization', '学校'],
+    ['degree', '学历 / 学位'],
+    ['studyMode', '培养方式'],
+    ['major', '专业'],
+    ['location', '学校地点'],
+  ],
+} as const;
+export function createEntry(): Entry {
+  return {
+    id: crypto.randomUUID(),
+    organization: '',
+    role: '',
+    location: '',
+    degree: '',
+    major: '',
+    studyMode: '',
+    start: '',
+    end: '',
+    body: '',
+  };
+}
 export const moduleSchema = z.object({
   id: z.string().regex(/^[\w-]{1,80}$/),
   field: z.string().regex(/^[\w.-]{1,80}$/),
@@ -43,13 +123,14 @@ export const moduleSchema = z.object({
   titleStyle: typography,
   bodyStyle: typography,
   width: z.enum(['full', 'half']),
-  image,
+  entries: z.array(entrySchema).max(30),
+  entryLayout: z.enum(['left-right', 'left-center-right']),
   visible: z.boolean(),
   pageBreak: z.boolean(),
 });
 export const documentSchema = z
   .object({
-    version: z.literal(1),
+    version: z.literal(2),
     name: short,
     profile: z.object({
       name: short,
@@ -58,11 +139,33 @@ export const documentSchema = z
       phone: short,
       location: short,
       website: short,
+      gender: short,
+      github: short,
+      ethnicity: short,
+      birthDate: short,
+      politicalStatus: short,
+      hometown: short,
+      residence: short,
+      experienceYears: short,
+      columns: z.number().int().min(1).max(3),
+      infoWidth: z.number().min(280).max(678),
       photo: image,
       shape: z.enum(['square', 'circle']),
       x: z.number().min(0).max(100),
       y: z.number().min(0).max(100),
       zoom: z.number().min(1).max(3),
+    }),
+    media: z.object({
+      photo: placementSchema,
+      qr: placementSchema.safeExtend({ image, label: short }),
+    }),
+    pageDecoration: z.object({
+      headerVisible: z.boolean(),
+      headerText: short,
+      footerVisible: z.boolean(),
+      footerText: z.string().max(100),
+      pageNumberVisible: z.boolean(),
+      pageNumberFormat: z.string().max(60),
     }),
     theme: z.object({
       template: z.enum(['editorial', 'classic', 'compact']),
@@ -77,6 +180,20 @@ export const documentSchema = z
       ctx.addIssue({ code: 'custom', message: '模块 ID 不可重复', path: ['modules'] });
     if (new Set(doc.modules.map((m) => m.field)).size !== doc.modules.length)
       ctx.addIssue({ code: 'custom', message: '字段键不可重复', path: ['modules'] });
+    for (const [i, m] of doc.modules.entries()) {
+      if (new Set(m.entries.map((e) => e.id)).size !== m.entries.length)
+        ctx.addIssue({
+          code: 'custom',
+          message: '经历条目 ID 不可重复',
+          path: ['modules', i, 'entries'],
+        });
+      if (m.kind === 'text' ? m.entries.length > 0 : m.body !== '')
+        ctx.addIssue({
+          code: 'custom',
+          message: '文本使用正文，经历使用结构化条目',
+          path: ['modules', i],
+        });
+    }
   });
 export type Resume = z.infer<typeof documentSchema>;
 export type Module = z.infer<typeof moduleSchema>;
@@ -86,14 +203,9 @@ export const componentRegistry: Record<Module['kind'], { label: string; initial:
     label: '文本框',
     initial: '在这里介绍你的经历，支持 **加粗**、*斜体*、==高亮== 和 `行内代码`。',
   },
-  ordered: { label: '有序列表', initial: '1. 描述工作目标\n2. 展示解决方案\n3. 用数据呈现成果' },
-  unordered: { label: '无序列表', initial: '- 一项关键能力\n- 一个可量化的成果' },
-  nested: {
-    label: '多层列表',
-    initial:
-      '- 专业能力\n  - 产品设计与用户研究\n  - 跨团队协作\n- 技术能力\n  - React / TypeScript',
-  },
-  qr: { label: '二维码', initial: '扫码查看我的作品集' },
+  experience: { label: '工作经历', initial: '' },
+  projects: { label: '项目经历', initial: '' },
+  education: { label: '教育背景', initial: '' },
 };
 export function createModule(kind: Module['kind'], id: string = crypto.randomUUID()): Module {
   return {
@@ -102,13 +214,21 @@ export function createModule(kind: Module['kind'], id: string = crypto.randomUUI
     kind,
     title: componentRegistry[kind].label,
     body: componentRegistry[kind].initial,
-    icon: kind === 'qr' ? 'link' : 'star',
+    icon:
+      kind === 'education'
+        ? 'graduation'
+        : kind === 'experience'
+          ? 'briefcase'
+          : kind === 'projects'
+            ? 'code'
+            : 'star',
     titleStyle: { font: 'sans', size: 15 },
     bodyStyle: { font: 'sans', size: 12 },
     width: 'full',
     visible: true,
     pageBreak: false,
-    image: '',
+    entries: kind === 'text' ? [] : [createEntry()],
+    entryLayout: 'left-right',
   };
 }
 const section = (id: string, title: string, icon: Module['icon'], body: string): Module => ({
@@ -119,7 +239,7 @@ const section = (id: string, title: string, icon: Module['icon'], body: string):
   body,
 });
 export const sample: Resume = {
-  version: 1,
+  version: 2,
   name: '伊云程 · 产品设计师',
   profile: {
     name: '伊云程',
@@ -128,11 +248,33 @@ export const sample: Resume = {
     phone: '138 0000 0000',
     location: '上海',
     website: 'portfolio.example.com',
+    gender: '',
+    github: '',
+    ethnicity: '',
+    birthDate: '',
+    politicalStatus: '',
+    hometown: '',
+    residence: '',
+    experienceYears: '',
+    columns: 2,
+    infoWidth: 530,
     photo: '',
     shape: 'circle',
     x: 50,
     y: 50,
     zoom: 1,
+  },
+  media: {
+    photo: { page: 1, left: 636, top: 60, size: 96, visible: true },
+    qr: { page: 1, left: 636, top: 900, size: 96, visible: true, image: '', label: '作品集二维码' },
+  },
+  pageDecoration: {
+    headerVisible: true,
+    headerText: 'PERSONAL RESUME',
+    footerVisible: true,
+    footerText: '伊云程 · 产品设计师',
+    pageNumberVisible: true,
+    pageNumberFormat: '{page} / {pages}',
   },
   theme: { template: 'editorial', accent: '#315b50', font: 'sans', spacing: 18 },
   modules: [
@@ -142,24 +284,65 @@ export const sample: Resume = {
       'user',
       '拥有 **5 年数字产品设计经验**，专注于将复杂问题转化为清晰、自然的用户体验。兼具设计思维与技术视角，持续探索有温度的数字产品。',
     ),
-    section(
-      'experience',
-      '工作经历',
-      'briefcase',
-      '### 高级产品设计师 · 山海科技\n**2022.06 — 至今** · 上海\n- 负责核心 SaaS 产品的体验设计，服务 **20,000+** 企业用户。\n- 从 0 到 1 搭建设计系统，交付效率提升 **35%**。\n- 与产品、研发团队紧密协作，核心流程转化率提升 **24%**。\n\n### 产品设计师 · 灵感工作室\n**2020.07 — 2022.05** · 杭州\n- 参与 8 个移动端与 Web 产品的全流程设计。\n- 通过用户访谈与可用性测试，持续优化产品体验。',
-    ),
-    section(
-      'projects',
-      '精选项目',
-      'code',
-      '### Atlas · 团队协作平台\n**体验设计负责人** · 2023\n为分布式团队设计轻量、高效的协作体验。主导信息架构重构与交互设计，上线后用户满意度达到 **4.8 / 5**。\n- 设计覆盖桌面与移动端的统一组件库。\n- 将新用户首次任务完成时间缩短 **40%**。',
-    ),
-    section(
-      'education',
-      '教育背景',
-      'graduation',
-      '**浙江大学** · 工业设计 · 本科\n\n2016.09 — 2020.06',
-    ),
+    {
+      ...createModule('experience', 'experience'),
+      field: 'experience',
+      entries: [
+        {
+          ...createEntry(),
+          id: 'job-1',
+          organization: '山海科技',
+          role: '高级产品设计师',
+          location: '上海',
+          start: '2022.06',
+          end: '至今',
+          body: '- 负责核心 SaaS 产品的体验设计，服务 **20,000+** 企业用户。\n- 从 0 到 1 搭建设计系统，交付效率提升 **35%**。\n- 核心流程转化率提升 **24%**。',
+        },
+        {
+          ...createEntry(),
+          id: 'job-2',
+          organization: '灵感工作室',
+          role: '产品设计师',
+          location: '杭州',
+          start: '2020.07',
+          end: '2022.05',
+          body: '- 参与 8 个移动端与 Web 产品的全流程设计。\n- 通过用户访谈与可用性测试，持续优化产品体验。',
+        },
+      ],
+    },
+    {
+      ...createModule('projects', 'projects'),
+      field: 'projects',
+      title: '精选项目',
+      entries: [
+        {
+          ...createEntry(),
+          id: 'project-1',
+          organization: 'Atlas · 团队协作平台',
+          role: '体验设计负责人',
+          start: '2023',
+          end: '2024',
+          body: '为分布式团队设计轻量、高效的协作体验。主导信息架构重构与交互设计，用户满意度达到 **4.8 / 5**。\n- 将新用户首次任务完成时间缩短 **40%**。',
+        },
+      ],
+    },
+    {
+      ...createModule('education', 'education'),
+      field: 'education',
+      entries: [
+        {
+          ...createEntry(),
+          id: 'school-1',
+          organization: '浙江大学',
+          degree: '本科',
+          studyMode: '全日制',
+          major: '工业设计',
+          start: '2016.09',
+          end: '2020.06',
+          body: '- 主修课程：交互设计、设计研究、产品设计。',
+        },
+      ],
+    },
     section(
       'skills',
       '专业技能',

@@ -1,9 +1,27 @@
 import { get, set } from 'idb-keyval';
-import { documentSchema, type Resume } from './model';
-const KEY = 'folio.resume.v1';
+import { documentSchema, sample, type Resume } from './model';
+const KEY = 'folio.resume.v2';
+let defaultAvatar: Promise<string> | undefined;
+export function loadDefaultAvatar(): Promise<string> {
+  // Normalize once; saved documents and exports always carry an offline raster data URL.
+  defaultAvatar ??= (async () => {
+    const response = await fetch(`${import.meta.env.BASE_URL}avatar.webp`);
+    if (!response.ok) throw new Error('默认头像加载失败，请重试');
+    return readImage(new File([await response.blob()], 'avatar.webp', { type: 'image/webp' }));
+  })().catch((error) => {
+    defaultAvatar = undefined;
+    throw error;
+  });
+  return defaultAvatar;
+}
 export async function loadResume(): Promise<Resume | undefined> {
   const value: unknown = await get(KEY);
-  return value === undefined ? undefined : documentSchema.parse(value);
+  return value === undefined
+    ? documentSchema.parse({
+        ...sample,
+        profile: { ...sample.profile, photo: await loadDefaultAvatar() },
+      })
+    : documentSchema.parse(value);
 }
 export async function saveResume(doc: Resume) {
   await set(KEY, doc);

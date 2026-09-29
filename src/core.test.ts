@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { markdown } from './markdown';
-import { applyTemplate, createModule, documentSchema, moveModule, sample } from './model';
+import {
+  applyTemplate,
+  createModule,
+  documentSchema,
+  moveModule,
+  sample,
+  fitPlacement,
+  placementSchema,
+} from './model';
 import { CONTENT_HEIGHT, paginate, rowsFor } from './pagination';
 import { parseImport } from './storage';
 
@@ -29,7 +37,8 @@ describe('数据协议', () => {
     expect(parseImport(JSON.stringify(sample))).toEqual(sample);
   });
   it('拒绝未来版本、危险图片、重复 id 与字段', () => {
-    expect(documentSchema.safeParse({ ...sample, version: 2 }).success).toBe(false);
+    expect(documentSchema.safeParse({ ...sample, version: 3 }).success).toBe(false);
+    expect(documentSchema.safeParse({ ...sample, version: 1 }).success).toBe(false);
     expect(
       documentSchema.safeParse({
         ...sample,
@@ -48,6 +57,9 @@ describe('数据协议', () => {
     const next = applyTemplate(sample, 'compact');
     expect(next.modules.map((m) => m.body)).toEqual(sample.modules.map((m) => m.body));
     expect(next.profile).toEqual(sample.profile);
+    expect(next.media).toEqual(sample.media);
+    expect(next.pageDecoration).toEqual(sample.pageDecoration);
+    expect(next.modules.map((m) => m.entries)).toEqual(sample.modules.map((m) => m.entries));
     expect(moveModule(sample.modules, 'summary', 'projects').map((m) => m.id)).toEqual([
       'experience',
       'projects',
@@ -56,6 +68,47 @@ describe('数据协议', () => {
       'skills',
     ]);
     expect(sample.modules[0].id).toBe('summary');
+  });
+  it('限制图片边界、页码与大小，拒绝远程二维码及旧组件', () => {
+    const p = sample.media.photo;
+    expect(placementSchema.safeParse({ ...p, left: 790 }).success).toBe(false);
+    expect(placementSchema.safeParse({ ...p, page: 0 }).success).toBe(false);
+    expect(fitPlacement({ ...p, left: -100, top: 1200, size: 400 })).toMatchObject({
+      left: 0,
+      top: 822,
+      size: 300,
+    });
+    expect(
+      documentSchema.safeParse({
+        ...sample,
+        media: { ...sample.media, qr: { ...sample.media.qr, image: 'https://example.test/a.png' } },
+      }).success,
+    ).toBe(false);
+    for (const kind of ['qr', 'ordered', 'unordered', 'nested']) {
+      expect(
+        documentSchema.safeParse({ ...sample, modules: [{ ...sample.modules[0], kind }] }).success,
+      ).toBe(false);
+    }
+  });
+  it('结构化条目独立保存并校验重复 ID 和文本正文边界', () => {
+    const module = createModule('education', 'new-school');
+    expect(module.entries).toHaveLength(1);
+    expect(
+      documentSchema.safeParse({
+        ...sample,
+        modules: [{ ...module, entries: [module.entries[0], module.entries[0]] }],
+      }).success,
+    ).toBe(false);
+    expect(
+      documentSchema.safeParse({ ...sample, modules: [{ ...module, body: '不应隐藏的正文' }] })
+        .success,
+    ).toBe(false);
+    expect(
+      documentSchema.safeParse({
+        ...sample,
+        modules: [{ ...module, entries: [{ ...module.entries[0], body: 'x'.repeat(30001) }] }],
+      }).success,
+    ).toBe(false);
   });
 });
 describe('分页', () => {

@@ -32,12 +32,20 @@ async function prepare() {
 export function safeFilename(name: string) {
   return (name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || '我的简历').slice(0, 100);
 }
+function copyPages(root: HTMLElement) {
+  const copy = root.cloneNode(true) as HTMLElement;
+  // Export the document without the preview's keyboard/drag controls.
+  copy.querySelectorAll('[data-media]').forEach((el) => {
+    for (const attr of ['role', 'tabindex', 'title', 'aria-label']) el.removeAttribute(attr);
+  });
+  return copy;
+}
 export async function exportHTML(name: string) {
   const root = await prepare(),
     fonts = await embeddedFontCSS();
   const container = root.parentElement!.cloneNode(false) as HTMLElement;
   container.removeAttribute('data-ready');
-  container.append(root.cloneNode(true));
+  container.append(copyPages(root));
   const title = document.createElement('span');
   title.textContent = name;
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>${title.innerHTML}</title><style>${fonts}\n${resumeCSS}\nbody{margin:0;background:#ededeb;padding:24px 0}.resume-page{max-width:none}@media print{body{padding:0}.resume-page{margin:0;box-shadow:none;break-after:page}.resume-page:last-child{break-after:auto}}</style></head><body>${container.outerHTML}</body></html>`;
@@ -59,7 +67,7 @@ export async function exportPDF(name: string, progress: (value: string) => void)
   staging.style.top = '0';
   staging.style.width = '794px';
   staging.setAttribute('aria-hidden', 'true');
-  const copy = root.cloneNode(true) as HTMLElement;
+  const copy = copyPages(root);
   copy.removeAttribute('id');
   staging.append(copy);
   document.body.append(staging);
@@ -94,11 +102,12 @@ export async function printResume() {
   const host = document.createElement('div');
   host.className = 'print-root';
   const wrapper = root.parentElement!.cloneNode(false) as HTMLElement;
-  wrapper.append(root.cloneNode(true));
+  wrapper.append(copyPages(root));
   host.append(wrapper);
   document.body.append(host);
   try {
     await document.fonts.ready;
+    await Promise.all(Array.from(host.querySelectorAll('img')).map((img) => img.decode()));
     window.print();
   } finally {
     host.remove();

@@ -7,8 +7,24 @@ import {
   Award,
   Link,
   Star,
+  Phone,
+  Mail,
+  MapPin,
+  Globe,
+  Github,
+  CalendarDays,
+  Flag,
+  ContactRound,
+  Clock,
 } from 'lucide-react';
-import { fontFamilies, type Resume, type Module } from './model';
+import {
+  fontFamilies,
+  profileFields,
+  fitPlacement,
+  type Placement,
+  type Resume,
+  type Module,
+} from './model';
 import { markdown } from './markdown';
 import { rowsFor, paginate, type Row } from './pagination';
 
@@ -20,6 +36,20 @@ const iconMap = {
   award: Award,
   link: Link,
   star: Star,
+};
+const contactIcons = {
+  phone: Phone,
+  email: Mail,
+  gender: UserRound,
+  github: Github,
+  website: Globe,
+  ethnicity: ContactRound,
+  birthDate: CalendarDays,
+  politicalStatus: Flag,
+  hometown: MapPin,
+  residence: MapPin,
+  location: MapPin,
+  experienceYears: Clock,
 };
 export function SectionIcon({ name, size = 16 }: { name: Module['icon']; size?: number }) {
   if (name === 'none') return null;
@@ -50,19 +80,31 @@ const Profile = memo(function Profile({ doc }: { doc: Resume }) {
   const p = doc.profile;
   return (
     <header className="resume-header">
-      <div className="resume-identity">
-        <div className="resume-eyebrow">
-          {doc.theme.template === 'editorial' ? 'PERSONAL RESUME' : 'CURRICULUM VITAE'}
-        </div>
+      <div className="resume-identity" style={{ width: p.infoWidth }}>
+        {doc.pageDecoration.headerVisible && (
+          <div className="resume-eyebrow">{doc.pageDecoration.headerText}</div>
+        )}
         <h1>{p.name || '你的姓名'}</h1>
         <p className="resume-role">{p.role}</p>
-        <div className="resume-contact">
-          {[p.location, p.phone, p.email, p.website].filter(Boolean).map((s, i) => (
-            <span key={i}>{s}</span>
-          ))}
+        <div
+          className="resume-contact"
+          style={{ gridTemplateColumns: `repeat(${p.columns}, minmax(0, 1fr))` }}
+        >
+          {profileFields
+            .filter(([key]) => p[key])
+            .map(([key, label]) => {
+              const Icon = contactIcons[key];
+              return (
+                <div className="resume-contact-item" key={key}>
+                  <Icon size={13} aria-hidden="true" />
+                  <span>
+                    {label}：{p[key]}
+                  </span>
+                </div>
+              );
+            })}
         </div>
       </div>
-      <Avatar profile={p} />
     </header>
   );
 });
@@ -75,17 +117,47 @@ const Block = memo(function Block({ item }: { item: Module }) {
         <SectionIcon name={item.icon} />
         <span>{item.title}</span>
       </h2>
-      {item.kind === 'qr' &&
-        (item.image ? (
-          <img className="resume-qr" src={item.image} alt={`${item.title}二维码`} />
+      <div style={{ fontFamily: fontFamilies[item.bodyStyle.font], fontSize: item.bodyStyle.size }}>
+        {item.kind === 'text' ? (
+          <div className="markdown" dangerouslySetInnerHTML={{ __html: markdown(item.body) }} />
         ) : (
-          <div className="qr-placeholder">上传二维码</div>
-        ))}
-      <div
-        className="markdown"
-        style={{ fontFamily: fontFamilies[item.bodyStyle.font], fontSize: item.bodyStyle.size }}
-        dangerouslySetInnerHTML={{ __html: markdown(item.body) }}
-      />
+          item.entries.map((entry) => {
+            const details =
+              item.kind === 'education'
+                ? [entry.degree + (entry.studyMode ? `（${entry.studyMode}）` : ''), entry.major]
+                    .filter(Boolean)
+                    .join(' · ')
+                : entry.role;
+            return (
+              <div className="resume-entry" key={entry.id} data-entry={entry.id}>
+                <div className={`entry-heading ${item.entryLayout}`}>
+                  <strong className="entry-main">
+                    {item.entryLayout === 'left-right'
+                      ? [entry.organization, details].filter(Boolean).join(' · ')
+                      : entry.organization}
+                  </strong>
+                  {item.entryLayout === 'left-center-right' && (
+                    <strong className="entry-middle">{details}</strong>
+                  )}
+                  <div className="entry-meta">
+                    {[entry.start, entry.end].filter(Boolean).join(' — ')}
+                    {entry.location && (
+                      <>
+                        {(entry.start || entry.end) && ' · '}
+                        <span className="entry-location">{entry.location}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div
+                  className="markdown"
+                  dangerouslySetInnerHTML={{ __html: markdown(entry.body) }}
+                />
+              </div>
+            );
+          })
+        )}
+      </div>
     </section>
   );
 });
@@ -98,19 +170,142 @@ function RenderRow({ row }: { row: Row }) {
     </div>
   );
 }
+
+function FloatingMedia({
+  doc,
+  kind,
+  onMove,
+  onDragging,
+}: {
+  doc: Resume;
+  kind: 'photo' | 'qr';
+  onMove: (kind: 'photo' | 'qr', placement: Placement) => void;
+  onDragging: (page: number | null) => void;
+}) {
+  const p = doc.media[kind];
+  const [draft, setDraft] = useState<Placement | null>(null);
+  const drag = useRef<{ offsetX: number; offsetY: number; scale: number; next: Placement } | null>(
+    null,
+  );
+  const name = kind === 'photo' ? '头像' : '二维码';
+  const position = draft || p;
+  return (
+    <div
+      className="resume-floating"
+      data-media={kind}
+      role="button"
+      tabIndex={0}
+      aria-label={`移动${name}`}
+      title="拖动定位；方向键微调，Shift 加速"
+      style={{ left: position.left, top: position.top, width: p.size, height: p.size }}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.currentTarget.focus();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        const rect = e.currentTarget.getBoundingClientRect();
+        const scale = rect.width / p.size;
+        drag.current = {
+          offsetX: (e.clientX - rect.left) / scale,
+          offsetY: (e.clientY - rect.top) / scale,
+          scale,
+          next: p,
+        };
+        onDragging(p.page);
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current;
+        if (!d) return;
+        const origin = e.currentTarget.closest('.resume-page')!.getBoundingClientRect();
+        const relativeTo = (rect: DOMRect) => ({
+          ...p,
+          left: (e.clientX - rect.left) / d.scale - d.offsetX,
+          top: (e.clientY - rect.top) / d.scale - d.offsetY,
+        });
+        setDraft(relativeTo(origin));
+        const pages = Array.from(
+          document.querySelectorAll<HTMLElement>('#resume-pages .resume-page'),
+        );
+        const target = pages.findIndex((page) => {
+          const r = page.getBoundingClientRect();
+          return (
+            e.clientX >= r.left &&
+            e.clientX <= r.right &&
+            e.clientY >= r.top &&
+            e.clientY <= r.bottom
+          );
+        });
+        if (target >= 0 && target + 1 !== p.page) {
+          const rect = pages[target].getBoundingClientRect();
+          d.next = fitPlacement({
+            ...relativeTo(rect),
+            page: target + 1,
+          });
+        } else d.next = fitPlacement(relativeTo(origin));
+      }}
+      onPointerUp={() => {
+        const d = drag.current;
+        if (d) onMove(kind, d.next);
+        drag.current = null;
+        setDraft(null);
+        onDragging(null);
+      }}
+      onPointerCancel={() => {
+        drag.current = null;
+        setDraft(null);
+        onDragging(null);
+      }}
+      onLostPointerCapture={() => {
+        drag.current = null;
+        setDraft(null);
+        onDragging(null);
+      }}
+      onKeyDown={(e) => {
+        const step = e.shiftKey ? 10 : 1;
+        const delta: Record<string, [number, number]> = {
+          ArrowLeft: [-step, 0],
+          ArrowRight: [step, 0],
+          ArrowUp: [0, -step],
+          ArrowDown: [0, step],
+        };
+        if (delta[e.key]) {
+          e.preventDefault();
+          onMove(
+            kind,
+            fitPlacement({ ...p, left: p.left + delta[e.key][0], top: p.top + delta[e.key][1] }),
+          );
+        }
+      }}
+    >
+      {kind === 'photo' ? (
+        <Avatar profile={doc.profile} />
+      ) : (
+        <img
+          className="resume-qr"
+          src={doc.media.qr.image}
+          alt={doc.media.qr.label || '二维码'}
+          draggable={false}
+        />
+      )}
+    </div>
+  );
+}
 export function ResumeView({
   doc,
   onReady,
   onSelect,
+  onMoveMedia,
 }: {
   doc: Resume;
   onReady: (count: number, overflow: string[]) => void;
   onSelect: (id: string) => void;
+  onMoveMedia: (kind: 'photo' | 'qr', placement: Placement) => void;
 }) {
   const measure = useRef<HTMLDivElement>(null);
   const [pages, setPages] = useState<Row[][]>([rowsFor(doc.modules)]);
   const [ready, setReady] = useState(false);
   const [resourceError, setResourceError] = useState('');
+  const [draggingPage, setDraggingPage] = useState<number | null>(null);
   useLayoutEffect(() => {
     let live = true;
     setReady(false);
@@ -129,7 +324,7 @@ export function ResumeView({
       const root = measure.current;
       if (!root || !live) return;
       await Promise.all(
-        Array.from(root.querySelectorAll('img')).map((img) => img.decode().catch(() => {})),
+        Array.from(root.parentElement!.querySelectorAll('img')).map((img) => img.decode()),
       );
       if (!live) return;
       // offsetHeight stays in layout pixels even when the preview is zoomed.
@@ -139,6 +334,12 @@ export function ResumeView({
       const header = root.querySelector<HTMLElement>('.resume-header')!.offsetHeight;
       const result = paginate(rowsFor(doc.modules), heights, header, doc.theme.spacing);
       if (header > 994) result.oversized.push('基本信息');
+      const mediaPage = Math.max(
+        1,
+        doc.profile.photo && doc.media.photo.visible ? doc.media.photo.page : 1,
+        doc.media.qr.image && doc.media.qr.visible ? doc.media.qr.page : 1,
+      );
+      while (result.pages.length < mediaPage) result.pages.push([]);
       setPages(result.pages);
       setReady(true);
       onReady(result.pages.length, result.oversized);
@@ -173,30 +374,61 @@ export function ResumeView({
             <RenderRow key={row[0].id} row={row} />
           ))}
         </div>
+        {doc.profile.photo && <img src={doc.profile.photo} alt="" />}
+        {doc.media.qr.image && <img src={doc.media.qr.image} alt="" />}
       </div>
       <div
         id="resume-pages"
         onClick={(e) => {
+          if ((e.target as HTMLElement).closest('[data-media]')) return onSelect('media');
           const el = (e.target as HTMLElement).closest('[data-module]');
           if (el) onSelect(el.getAttribute('data-module')!);
         }}
+        onKeyDown={(e) => {
+          if (['Enter', ' '].includes(e.key) && (e.target as HTMLElement).closest('[data-media]')) {
+            e.preventDefault();
+            onSelect('media');
+          }
+        }}
       >
         {pages.map((rows, i) => (
-          <article className="resume-page" key={i} aria-label={`简历第 ${i + 1} 页`}>
+          <article
+            className={`resume-page${draggingPage === i + 1 ? ' media-dragging' : ''}`}
+            key={i}
+            aria-label={`简历第 ${i + 1} 页`}
+          >
             <div className="resume-content">
               {i === 0 && <Profile doc={doc} />}
               {rows.map((row) => (
                 <RenderRow key={row[0].id} row={row} />
               ))}
             </div>
-            <footer className="resume-footer">
-              <span>
-                {doc.profile.name} · {doc.profile.role.split('/')[0]}
-              </span>
-              <span>
-                {String(i + 1).padStart(2, '0')} / {String(pages.length).padStart(2, '0')}
-              </span>
-            </footer>
+            {(['photo', 'qr'] as const).map(
+              (kind) =>
+                doc.media[kind].visible &&
+                doc.media[kind].page === i + 1 &&
+                (kind === 'photo' ? doc.profile.photo : doc.media.qr.image) && (
+                  <FloatingMedia
+                    key={kind}
+                    doc={doc}
+                    kind={kind}
+                    onMove={onMoveMedia}
+                    onDragging={setDraggingPage}
+                  />
+                ),
+            )}
+            {(doc.pageDecoration.footerVisible || doc.pageDecoration.pageNumberVisible) && (
+              <footer className="resume-footer">
+                <span>{doc.pageDecoration.footerVisible ? doc.pageDecoration.footerText : ''}</span>
+                {doc.pageDecoration.pageNumberVisible && (
+                  <span>
+                    {doc.pageDecoration.pageNumberFormat
+                      .replaceAll('{page}', String(i + 1))
+                      .replaceAll('{pages}', String(pages.length))}
+                  </span>
+                )}
+              </footer>
+            )}
           </article>
         ))}
       </div>
