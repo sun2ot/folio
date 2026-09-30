@@ -17,7 +17,8 @@ Folio 是纯前端、本地优先的简历平台。禁止未经明确产品需�
 | src/pagination.ts          | 纯布局算法：相邻半宽组行、整行分页、溢出报告                                              |
 | src/ResumeView.tsx         | 隐藏测量、资源等待、A4 DOM、页面内容、图标与仓库卡片呈现                                  |
 | src/resume.css             | 预览与所有导出共用的样式、纸张尺寸、文字色变量、打印规则                                  |
-| src/Editor.tsx             | 可编辑信息字段、头像取景、模块与 Markdown 编辑、取色控件                                  |
+| src/editor/                | 基本信息、头像取景、浮动图片、模块与 Markdown 编辑、字体颜色控件，按职责分文件            |
+| src/ResumePrimitives.tsx   | 编辑器与简历共用的头像和图标，无分页或导出依赖                                            |
 | src/IconPicker.tsx         | 带 SVG 预览与键盘导航的图标选择菜单（模块标题与信息字段共用）                             |
 | src/App.tsx                | 工作台组合、布局交互、模板切换、导出入口、作者入口                                        |
 | src/styles.css             | 仅工作台界面样式，不得影响简历 DOM                                                        |
@@ -28,7 +29,8 @@ Folio 是纯前端、本地优先的简历平台。禁止未经明确产品需�
 | build/fonts.ts             | 构建期把 Fontsource 的 @font-face 编译为 virtual:folio-fonts                              |
 | scripts/snapshot-github.ts | 构建前预取 github-repos.json 中的公开仓库到 public/github-repos.json                      |
 | .github/workflows/ci.yml   | 质量检查与主分支 Release 发布                                                             |
-| src/core.test.ts / tests/  | 单元测试 / Playwright 集成与下载检查                                                      |
+| src/\*.test.ts / tests/    | 按领域划分的单元测试 / 生产产物上的 Playwright 集成与导出检查                             |
+| build/licenses.ts          | 把项目与运行时依赖的原始许可写入静态分发包                                                |
 
 ## 不可破坏的约束
 

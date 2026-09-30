@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Check, ChevronDown, CircleSlash } from 'lucide-react';
 import { icons, type Module } from './model';
-import { SectionIcon } from './ResumeView';
+import { SectionIcon } from './ResumePrimitives';
 
 const labels: Record<Module['icon'], string> = {
   none: '无图标',

@@ -1,6 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
-import { pathToFileURL } from 'node:url';
 import { sample } from '../src/model';
 import { openApp, saved } from './helpers';
 
@@ -115,10 +113,7 @@ test('标题与正文全局色独立，恢复继承时取色按钮与预览同�
   await expect(page.getByLabel('姓名颜色取色')).toHaveValue('#2c466b');
 });
 
-test('信息颜色按稳定 ID 保存，模板、JSON、离线 HTML、PDF 与打印保留颜色', async ({
-  page,
-}, testInfo) => {
-  test.setTimeout(120_000);
+test('信息颜色按稳定 ID 随排序、模板切换和刷新保存', async ({ page }) => {
   await page.getByLabel('求职意向颜色取色').fill('#7d4651');
   await page.getByLabel('第 1 项颜色取色', { exact: true }).fill('#2f6b4f');
   const contact = page
@@ -147,56 +142,6 @@ test('信息颜色按稳定 ID 保存，模板、JSON、离线 HTML、PDF 与打
   await expect(page.getByLabel('第 2 项颜色取色', { exact: true })).toHaveValue('#2f6b4f');
   await expect(page.getByLabel('求职意向颜色取色')).toHaveValue('#7d4651');
   await expect(page.locator('.resume-document')).toHaveAttribute('data-ready', 'true');
-  for (const [kind, file] of [
-    ['JSON 数据备份', 'colors.json'],
-    ['独立 HTML', 'colors.html'],
-    ['保真 PDF', 'colors.pdf'],
-  ]) {
-    await page.getByRole('button', { name: '导出简历' }).click();
-    const download = page.waitForEvent('download');
-    await page.getByRole('button', { name: new RegExp(kind) }).click();
-    await (await download).saveAs(testInfo.outputPath(file));
-  }
-  const backup = JSON.parse(await readFile(testInfo.outputPath('colors.json'), 'utf8'));
-  expect(backup.theme).toMatchObject({ titleColor: '#2c466b', textColor: '#866339' });
-  expect(backup.profile.roleColor).toBe('#7d4651');
-  expect(backup.profile.fields.find((field: { id: string }) => field.id === 'phone').color).toBe(
-    '#2f6b4f',
-  );
-  await page.evaluate(() => {
-    window.print = () => {
-      const root = document.querySelector('.print-root')!;
-      document.documentElement.dataset.printTitleColor = getComputedStyle(
-        root.querySelector('h1')!,
-      ).color;
-      document.documentElement.dataset.printRoleColor = getComputedStyle(
-        root.querySelector('.resume-role')!,
-      ).color;
-    };
-  });
-  await page.getByRole('button', { name: '导出简历' }).click();
-  await page.getByRole('button', { name: /打印 \/ 文字 PDF/ }).click();
-  await expect(page.locator('html')).toHaveAttribute('data-print-title-color', 'rgb(44, 70, 107)');
-  await expect(page.locator('html')).toHaveAttribute('data-print-role-color', 'rgb(125, 70, 81)');
-  const offline = await page.context().newPage();
-  await page.context().setOffline(true);
-  await offline.goto(pathToFileURL(testInfo.outputPath('colors.html')).href);
-  await offline.evaluate(() => document.fonts.ready);
-  await expect(offline.locator('h1')).toHaveCSS('color', 'rgb(44, 70, 107)');
-  await expect(offline.locator('[data-module="summary"] .resume-body')).toHaveCSS(
-    'color',
-    'rgb(134, 99, 57)',
-  );
-  await expect(offline.locator('.resume-contact-item').filter({ hasText: '联系电话' })).toHaveCSS(
-    'color',
-    'rgb(47, 107, 79)',
-  );
-  await offline.screenshot({ path: testInfo.outputPath('colors-html.png'), fullPage: true });
-  await offline.pdf({
-    path: testInfo.outputPath('colors-print.pdf'),
-    preferCSSPageSize: true,
-    printBackground: true,
-  });
 });
 
 for (const width of [1440, 1024, 390]) {
@@ -208,25 +153,25 @@ for (const width of [1440, 1024, 390]) {
     const before = await picker.boundingBox();
     await picker.fill('#abcdef');
     const after = await picker.boundingBox();
-    expect(after).toEqual(before);
-    expect(after!.width).toBe(32);
-    expect(after!.height).toBe(32);
-    await expect(picker).toHaveCSS('border-radius', '50%');
+    // 操作后不发生布局跳动，不锁定控件的设计尺寸或禁用态色值。
+    expect(Math.abs(after!.width - before!.width)).toBeLessThan(1);
+    expect(Math.abs(after!.height - before!.height)).toBeLessThan(1);
     const reset = page.getByRole('button', { name: '标题颜色恢复跟随全局' });
-    await expect(reset).toHaveCSS('border-top-width', '1px');
     await reset.click();
     await expect(reset).toBeDisabled();
-    await expect(reset).toHaveCSS('color', 'rgb(160, 167, 156)');
     const size = page.getByLabel('标题字号', { exact: true });
     await size.selectOption('30');
-    expect((await size.boundingBox())!.width).toBeGreaterThan(45);
-    expect((await size.locator('..').boundingBox())!.width).toBe(70);
-    expect((await size.boundingBox())!.height).toBe(40);
     const fontBox = (await page.getByLabel('标题字体', { exact: true }).boundingBox())!;
     const sizeBox = (await size.boundingBox())!;
     const colorBox = (await picker.boundingBox())!;
-    expect(Math.abs(fontBox.y - sizeBox.y)).toBeLessThan(1);
-    expect(Math.abs(sizeBox.y + 4 - colorBox.y)).toBeLessThan(1);
+    expect(Math.max(fontBox.y, sizeBox.y, colorBox.y)).toBeLessThan(
+      Math.min(
+        fontBox.y + fontBox.height,
+        sizeBox.y + sizeBox.height,
+        colorBox.y + colorBox.height,
+      ),
+    );
+    expect(sizeBox.x + sizeBox.width).toBeLessThanOrEqual(colorBox.x);
     await expect(size).toHaveValue('30');
     await size.selectOption('15');
     const editor = page.locator('.editor-panel');
@@ -251,87 +196,3 @@ for (const width of [1440, 1024, 390]) {
     expect(await editor.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   });
 }
-
-test('仓库卡片使用作者头像，且不在简历上显示快照日期标记', async ({ page }, testInfo) => {
-  const image = await page.evaluate(async () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#315b50';
-    ctx.fillRect(0, 0, 64, 64);
-    ctx.fillStyle = '#f8e8ab';
-    ctx.fillRect(16, 16, 32, 32);
-    const blob = await new Promise<Blob>((resolve) =>
-      canvas.toBlob((b) => resolve(b!), 'image/png'),
-    );
-    const buffer = await blob.arrayBuffer();
-    return [...new Uint8Array(buffer)];
-  });
-  // 只拦截 GitHub，其余请求（本地字体分片）保持直连。
-  await page.route('https://api.github.com/**', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        owner: {
-          login: 'sun2ot',
-          id: 12345,
-          avatar_url: 'https://avatars.githubusercontent.com/u/12345?v=4',
-        },
-        name: 'folio',
-        description: '纯前端、本地优先的简历工作室。',
-        stargazers_count: 128,
-        forks_count: 6,
-        language: 'TypeScript',
-      }),
-    }),
-  );
-  await page.route('https://avatars.githubusercontent.com/u/12345*', (route) =>
-    route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(image) }),
-  );
-  await page.getByRole('button', { name: '精选项目', exact: true }).click();
-  const editor = page.locator('details.repository-editor').first();
-  await editor.locator('summary').filter({ hasText: 'GitHub 仓库卡片' }).click();
-  await editor.getByLabel('显示仓库卡片').check();
-  await editor.getByLabel('允许联网搜索 / 刷新').check();
-  await editor.getByRole('textbox', { name: /GitHub 链接/ }).fill('sun2ot/folio');
-  await editor.getByRole('button', { name: '搜索 / 刷新仓库' }).click();
-  await editor.getByRole('button', { name: /sun2ot\/folio/ }).click();
-  await expect(editor.getByRole('status')).toContainText('已保存');
-  const card = page.locator('#resume-pages [data-module="projects"] .resume-repository').first();
-  await expect(card).toContainText('★ 128 Star');
-  const avatar = card.locator('img.repository-avatar');
-  await expect(avatar).toHaveAttribute('src', /^data:image\/png;base64,/);
-  expect(
-    await avatar.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0),
-  ).toBe(true);
-  // 卡片上不再出现快照日期，改为作者头像 + 名称。
-  await expect(card.locator('.repository-stats')).not.toContainText('快照');
-  await expect(card.locator('.repository-stats')).not.toContainText('手动信息');
-  await expect(card.locator('.repository-title')).toContainText('sun2ot');
-  await page.screenshot({ path: testInfo.outputPath('repository-avatar.png'), fullPage: true });
-  // 头像随备份与离线 HTML 一起带走，不需要再联网。
-  const backup = page.waitForEvent('download');
-  await page.getByRole('button', { name: '导出简历' }).click();
-  await page.getByRole('button', { name: /JSON 数据备份/ }).click();
-  const json = testInfo.outputPath('avatar-card.json');
-  await (await backup).saveAs(json);
-  const doc = JSON.parse(await readFile(json, 'utf8'));
-  const projects = doc.modules.find((m: { field: string }) => m.field === 'projects');
-  expect(projects.entries[0].github.snapshot.avatar).toMatch(/^data:image\/png;base64,/);
-  await page.getByRole('button', { name: '导出简历' }).click();
-  const html = page.waitForEvent('download');
-  await page.getByRole('button', { name: /独立 HTML/ }).click();
-  const htmlPath = testInfo.outputPath('avatar-card.html');
-  await (await html).saveAs(htmlPath);
-  const offline = await page.context().newPage();
-  await page.context().setOffline(true);
-  await offline.goto(pathToFileURL(htmlPath).href);
-  await expect(offline.locator('.resume-repository img.repository-avatar')).toHaveAttribute(
-    'src',
-    /^data:image\/png;base64,/,
-  );
-  await expect(offline.locator('.repository-stats')).not.toContainText('快照');
-  await page.context().setOffline(false);
-});

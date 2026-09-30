@@ -42,8 +42,12 @@ import {
 } from './model';
 import { useResume } from './useResume';
 import { download, parseImport } from './storage';
-import { ResumeView, SectionIcon } from './ResumeView';
-import { ColorField, FontSelect, MediaEditor, ModuleEditor, ProfileEditor } from './Editor';
+import { ResumeView } from './ResumeView';
+import { SectionIcon } from './ResumePrimitives';
+import { ColorField, FontSelect } from './editor/TypographyControls';
+import { MediaEditor } from './editor/MediaEditor';
+import { ModuleEditor } from './editor/ModuleEditor';
+import { ProfileEditor } from './editor/ProfileEditor';
 
 type Tab = 'content' | 'templates' | 'design';
 export default function App() {

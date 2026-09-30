@@ -116,6 +116,8 @@ pageDecoration 包含 headerVisible/headerText、footerVisible/footerText、page
 
 ## 模板与扩展
 
+基本信息、模块内容和浮动图片编辑组件位于 `src/editor/`，共享字体颜色控件位于同目录；头像与图标由 `src/ResumePrimitives.tsx` 提供。编辑器只组合这些组件，不依赖分页测量实现。可见简历仍由 `ResumeView` 渲染，并与测量和全部导出共用 `resume.css`。
+
 1. 添加模板时修改 theme.template schema、applyTemplate、选择器与 resume.css。
 2. 模板通过稳定 field 映射初始栏宽，仅修改布局和主题；不得修改 ID、条目、正文、字体、图片、页眉页脚。
 3. 新字段更新 schema、示例、编辑和呈现，并加入导入与往返测试。开发阶段有破坏性修改时递增版本、更新存储键；不添加旧格式兼容分支。

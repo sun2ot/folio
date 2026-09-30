@@ -1,40 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { markdown } from './markdown';
 import {
   applyTemplate,
   createInfoField,
   createModule,
   documentSchema,
-  infoFieldPresets,
   moveModule,
   sample,
   fitPlacement,
   placementSchema,
   defaultDivider,
 } from './model';
-import { CONTENT_HEIGHT, paginate, rowsFor } from './pagination';
 import { parseImport } from './storage';
 
-describe('安全 Markdown 与组合格式', () => {
-  it('保留嵌套的加粗、斜体、高亮与行内代码', () => {
-    expect(markdown('**==*成果*==**')).toContain('<strong><mark><em>成果</em></mark></strong>');
-    expect(markdown('**`React`**')).toContain('<strong><code>React</code></strong>');
-    expect(markdown('`==literal==`')).toContain('<code>==literal==</code>');
-  });
-  it('移除脚本、事件属性、远程图片和危险链接', () => {
-    const html = markdown(
-      '<script>alert(1)</script><img src="https://evil.test/a" onerror="alert(1)"><a href="javascript:alert(1)" style="color:red">link</a>',
-    );
-    expect(html).not.toMatch(/script|onerror|<img|style=/);
-    expect(html).toContain('<a>link</a>');
-  });
-  it('多层有序和无序列表', () => {
-    const html = markdown('1. 工作\n   - 子项\n   - 子项二\n2. 教育');
-    expect(html).toContain('<ol>');
-    expect(html).toContain('<ul>');
-    expect(html.match(/<li>/g)).toHaveLength(4);
-  });
-});
 describe('数据协议', () => {
   it('示例数据及备份无损往返', () => {
     expect(parseImport(JSON.stringify(sample))).toEqual(sample);
@@ -168,9 +145,12 @@ describe('数据协议', () => {
   });
   it('基本信息字段可改名、换图标、增删排序，并校验重复 ID 与颜色', () => {
     const fields = sample.profile.fields;
-    expect(fields.map((f) => f.id)).toEqual(infoFieldPresets.map((preset) => preset.key));
-    // 示例故意把预设「出生日期」改成「生日」，证明标签不是固定枚举。
-    expect(fields.find((f) => f.id === 'birthDate')?.label).toBe('生日');
+    expect(
+      documentSchema.safeParse({
+        ...sample,
+        profile: { ...sample.profile, fields: [{ ...fields[0], label: '任意自定义标签' }] },
+      }).success,
+    ).toBe(true);
     expect(
       documentSchema.safeParse({
         ...sample,
@@ -298,34 +278,5 @@ describe('数据协议', () => {
         modules: [{ ...module, entries: [{ ...module.entries[0], body: 'x'.repeat(30001) }] }],
       }).success,
     ).toBe(false);
-  });
-});
-describe('分页', () => {
-  const make = (id: string, half = false) => ({
-    ...createModule('text', id),
-    width: half ? ('half' as const) : ('full' as const),
-  });
-  it('相邻半宽模块组成双栏，隐藏模块不占空间', () => {
-    expect(
-      rowsFor([make('a', true), make('b', true), { ...make('c'), visible: false }]).map(
-        (r) => r.length,
-      ),
-    ).toEqual([2]);
-  });
-  it('分页保持行完整', () => {
-    const rows = rowsFor([make('a'), make('b')]);
-    const result = paginate(rows, [500, 400], 160, 18);
-    expect(result.pages.map((p) => p.flat().map((m) => m.id))).toEqual([['a'], ['b']]);
-  });
-  it('手动换页不会合并到前一双栏', () => {
-    const rows = rowsFor([make('a', true), { ...make('b', true), pageBreak: true }]);
-    expect(rows).toHaveLength(2);
-    expect(paginate(rows, [100, 100], 100, 18).pages).toHaveLength(2);
-  });
-  it('检测超长模块，空简历仍保留个人信息页', () => {
-    expect(paginate(rowsFor([make('a')]), [CONTENT_HEIGHT + 1], 120, 18).oversized).toEqual([
-      '文本框',
-    ]);
-    expect(paginate([], [], 100, 18).pages).toEqual([[]]);
   });
 });

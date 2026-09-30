@@ -4,7 +4,7 @@
 
 ## 启动
 
-需要 Node.js 22.12+ 与 pnpm 12.6.0（项目 `packageManager` 固定版本）。
+需要 Node.js 22.13+ 与 pnpm 12.6.0（项目 `packageManager` 固定版本）。
 
 ```sh
 pnpm install
@@ -15,10 +15,11 @@ pnpm dev
 ```sh
 pnpm test                 # 协议、安全 Markdown、字体分片、GitHub 卡片、分页与布局测试
 pnpm format:check         # 检查统一代码格式
+pnpm check:tests          # 独立检查浏览器测试与 Playwright 配置的类型
 pnpm snapshot:github      # 预取 github-repos.json 中的公开仓库（可选，需要外网）
 pnpm build                # 严格 TypeScript 检查 + 生产打包
 pnpm exec playwright install chromium
-pnpm test:e2e             # Chromium 浏览器集成与导出测试
+pnpm test:e2e             # 对已构建的 dist 运行 Chromium 集成与导出测试
 pnpm preview              # 本地检查 dist 部署产物
 ```
 
@@ -70,7 +71,7 @@ pnpm preview              # 本地检查 dist 部署产物
 
 字体按 unicode-range 拆分为 300 多个分片。预览时浏览器只下载命中的分片；构建产物仍包含全部资源文件，但不会一次加载。HTML 导出不嵌入整套字体：`build/fonts.ts` 把 `@font-face` 规则编译成 `virtual:folio-fonts` 模块，导出时按文档实际字符筛选分片再内嵌，文件大小与正文字符数相关。切换字体后请重新导出以刷新嵌入内容。
 
-字体许可均随上游包提供。`pnpm build` 的资源分发应同时保留本项目 `public/licenses/` 中的字体许可文件。第三方依赖许可见对应包；参考 `docs/THIRD_PARTY.md`。
+字体许可均随上游包提供。`pnpm build` 自动保留 `public/licenses/` 的字体许可，并将项目许可证、源码获取说明与运行时依赖的许可文本写入 `dist`；参考 `docs/THIRD_PARTY.md`。
 
 ## 静态部署
 
@@ -89,19 +90,27 @@ pnpm build
 
 ## 持续集成与发布
 
-`.github/workflows/ci.yml`：推送 `main`、提交 PR 或手动触发。`check` 任务安装依赖后依次执行 `pnpm test`、`pnpm format:check`、`pnpm snapshot:github`（仅主分支；用内置 token 预取公开仓库，失败不阻断）、`pnpm build`、Playwright Chromium 端到端测试；失败时上传 `test-results/`。
+`.github/workflows/ci.yml`：推送 `main`、提交 PR 或手动触发。`check` 任务安装依赖后执行单元测试、格式检查、`pnpm check:tests`、仓库快照更新（非 PR；失败保留内置快照）、生产构建与 Playwright Chromium 测试。浏览器测试访问本次 `dist` 的根路径与 `/folio/` 子路径，不复用开发服务；PDF 自动检查 A4、页数、正文非空和第二页图片位置。失败时上传 `test-results/`，其中包含 trace 和 PDF 页面渲染图。
 
-主分支构建成功后，`release` 任务下载构建产物，打包为 `folio-dist.zip` 与 `folio-dist.tar.gz` 并生成 `SHA256SUMS`，然后以 `build-<run_number>-<run_attempt>` 为标签、`--target $GITHUB_SHA` 发布 GitHub Release（附带自动生成的变更说明）。PR 不发布 Release。发布的压缩包即静态站点内容，解压后按上述方式部署。
+主分支构建成功后，`release` 任务下载构建产物与对应源码，发布 `folio-dist.zip`、`folio-dist.tar.gz`、`folio-source.tar.gz` 和三者的 `SHA256SUMS`。源码归档包含该提交的构建文件、lockfile 和构建时更新的离线快照，以便重建发布产物。标签为 `build-<run_number>-<run_attempt>`，指向 `$GITHUB_SHA`，附带自动生成的变更说明。PR 不发布 Release；静态站点包解压后按上述方式部署。
 
 如配置 CSP，至少允许同源脚本与字体、`img-src 'self' data: blob:`、`font-src 'self' data:`，以及动态内联样式（本应用使用 React style 与字体注入）。不要盲目启用阻断内联样式的策略。
 
 ## 开发入口
+
+源码按职责组织，基本信息、模块内容、浮动图片编辑及字体颜色控件位于 `src/editor/`；共享头像与图标位于 `src/ResumePrimitives.tsx`。简历 DOM 的全部视觉规则仍在 `src/resume.css`。单元测试与对应逻辑相邻，浏览器测试按交互、排版、导出、仓库和部署分组。
 
 - [AGENTS.md](AGENTS.md)：AI 与开发者工作约定、架构与验证步骤。
 - [docs/TEMPLATE_SPEC.md](docs/TEMPLATE_SPEC.md)：模板协议、字段共享、组件扩展。
 - [docs/TESTING.md](docs/TESTING.md)：测试范围、发布检查及限制。
 
 官方参考：[Vite 静态部署](https://vite.dev/guide/static-deploy)、[html2canvas 配置](https://html2canvas.hertzen.com/configuration)。
+
+## 许可证
+
+Copyright (C) 2026 sun2ot。Folio 项目代码采用 [GNU GPL v3，仅此版本](LICENSE)（SPDX：`GPL-3.0-only`）。允许使用、修改和商业分发；分发修改版时须依照许可证提供对应源码、构建文件及修改说明，并保留版权与许可声明。第三方依赖与字体保留各自许可。
+
+官方 Release 同时提供静态站点包与 `folio-source.tar.gz`；重新分发时应保留对应源码的获取途径。仅部署到服务器供浏览器访问也会向访问者分发前端 JavaScript，需按许可证提供对应源码。简历正文属于用户，不因使用 Folio 而自动变成 GPL 授权内容。
 
 ## 已知权衡
 

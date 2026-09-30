@@ -22,6 +22,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: pnpm format:check
+      - run: pnpm check:tests
       - name: Cache public repository cards for offline use
         if: github.event_name != 'pull_request'
         continue-on-error: true
@@ -31,11 +32,21 @@ jobs:
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+      - name: Archive corresponding source including the build's offline snapshot
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: git ls-files -z | tar --null --files-from=- -czf folio-source.tar.gz
       - uses: actions/upload-artifact@v4
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:
           name: folio-dist
           path: dist/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          name: folio-source
+          path: folio-source.tar.gz
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v4
@@ -54,16 +65,20 @@ jobs:
         with:
           name: folio-dist
           path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: folio-source
+          path: .
       - name: Package static site
         run: |
           (cd dist && zip -r ../folio-dist.zip .)
           tar -czf folio-dist.tar.gz -C dist .
-          sha256sum folio-dist.zip folio-dist.tar.gz > SHA256SUMS
+          sha256sum folio-dist.zip folio-dist.tar.gz folio-source.tar.gz > SHA256SUMS
       - name: Publish release for the tested commit
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: build-${{ github.run_number }}-${{ github.run_attempt }}
         run: |
-          gh release create "$TAG" folio-dist.zip folio-dist.tar.gz SHA256SUMS \
+          gh release create "$TAG" folio-dist.zip folio-dist.tar.gz folio-source.tar.gz SHA256SUMS \
             --target "$GITHUB_SHA" --title "Folio $TAG" --generate-notes --latest
