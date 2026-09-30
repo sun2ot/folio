@@ -1,6 +1,7 @@
 import resumeCSS from './resume.css?raw';
 import { embeddedFontCSS } from './fonts';
 import { download } from './storage';
+import { CONTENT_HEIGHT, FOOTER_RESERVE } from './pagination';
 
 function pagesRoot() {
   const root = document.querySelector('#resume-pages');
@@ -22,14 +23,16 @@ async function prepare() {
   await Promise.all(Array.from(root.querySelectorAll('img')).map((img) => img.decode()));
   if (
     Array.from(root.querySelectorAll<HTMLElement>('.resume-content')).some(
-      (el) => el.offsetHeight > 994,
+      (el) =>
+        el.offsetHeight >
+        (parseFloat(getComputedStyle(el).getPropertyValue('--content-height')) || CONTENT_HEIGHT),
     )
   ) {
     throw new Error('内容超出页面，请拆分模块或减小字号后导出');
   }
   if (
     Array.from(root.querySelectorAll<HTMLElement>('.resume-footer')).some(
-      (el) => el.offsetHeight > 54,
+      (el) => el.offsetHeight > FOOTER_RESERVE,
     )
   ) {
     throw new Error('页脚 / 页码超出底部留白，请缩小字号或缩短内容后导出');
@@ -97,6 +100,25 @@ export async function exportPDF(name: string, progress: (value: string) => void)
       pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 210, 297, undefined, 'FAST');
       canvas.width = 0;
       canvas.height = 0;
+      // 栅格页面本身不保留超链接；用同一无缩放 DOM 的坐标补上图标和正文链接。
+      const pageRect = pages[i].getBoundingClientRect();
+      for (const link of pages[i].querySelectorAll<HTMLAnchorElement>('a[href]')) {
+        if (!/^(https?:|mailto:|tel:)/i.test(link.href)) continue;
+        for (const rect of link.getClientRects()) {
+          const left = Math.max(rect.left, pageRect.left);
+          const top = Math.max(rect.top, pageRect.top);
+          const right = Math.min(rect.right, pageRect.right);
+          const bottom = Math.min(rect.bottom, pageRect.bottom);
+          if (right <= left || bottom <= top) continue;
+          pdf.link(
+            ((left - pageRect.left) / pageRect.width) * 210,
+            ((top - pageRect.top) / pageRect.height) * 297,
+            ((right - left) / pageRect.width) * 210,
+            ((bottom - top) / pageRect.height) * 297,
+            { url: link.href },
+          );
+        }
+      }
     }
     pdf.setProperties({ title: name, creator: 'Folio Resume Studio' });
     pdf.save(`${safeFilename(name)}.pdf`);

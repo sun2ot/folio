@@ -1,6 +1,14 @@
 import { documentSchema, sample } from '../src/model';
 import type { Page } from '@playwright/test';
 
+/** 编辑卡片的测试从无卡片的项目开始，默认展示样例由独立用例验证。 */
+export function emptyProjectCards() {
+  const doc = structuredClone(sample);
+  const projects = doc.modules.find((m) => m.kind === 'projects')!;
+  projects.entries = [{ ...projects.entries[0], github: { visible: false, snapshot: null } }];
+  return documentSchema.parse(doc);
+}
+
 /** 合成色块用于跨页图片定位，不含个人信息或真实二维码。 */
 export async function floatingDocument(page: Page) {
   const image = await page.evaluate(() => {

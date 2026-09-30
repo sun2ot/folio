@@ -180,11 +180,52 @@ export function ProfileEditor({
           onChange={(roleColor) => patch({ roleColor })}
         />
       </div>
+      <div className="field-row">
+        <label className="field">
+          <span>姓名字号</span>
+          <select
+            value={profile.nameSize ?? 34}
+            onChange={(e) => patch({ nameSize: +e.target.value })}
+          >
+            {Array.from({ length: 52 }, (_, i) => i + 9).map((size) => (
+              <option key={size} value={size}>
+                {size} px
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>求职意向字号</span>
+          <select
+            value={profile.roleSize ?? 13}
+            onChange={(e) => patch({ roleSize: +e.target.value })}
+          >
+            {Array.from({ length: 22 }, (_, i) => i + 9).map((size) => (
+              <option key={size} value={size}>
+                {size} px
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="info-fields">
         <div className="label-line">
           <span>信息字段</span>
           <span className="tag">{profile.fields.length} 项</span>
         </div>
+        <label className="field">
+          <span>信息字段默认字号</span>
+          <select
+            value={profile.infoSize ?? 12}
+            onChange={(e) => patch({ infoSize: +e.target.value })}
+          >
+            {Array.from({ length: 22 }, (_, i) => i + 9).map((size) => (
+              <option key={size} value={size}>
+                {size} px
+              </option>
+            ))}
+          </select>
+        </label>
         {profile.fields.map((field, i) => {
           const change = (values: Partial<InfoField>) =>
             patch({
@@ -233,6 +274,21 @@ export function ProfileEditor({
                 fallback={theme.textColor}
                 onChange={(color) => change({ color })}
               />
+              <label className="field">
+                <span>字段字号</span>
+                <select
+                  aria-label={`第 ${i + 1} 项字段字号`}
+                  value={field.size ?? ''}
+                  onChange={(e) => change({ size: e.target.value ? +e.target.value : undefined })}
+                >
+                  <option value="">跟随默认（{profile.infoSize ?? 12} px）</option>
+                  {Array.from({ length: 22 }, (_, n) => n + 9).map((size) => (
+                    <option key={size} value={size}>
+                      {size} px
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="entry-actions">
                 <button
                   className="small-button"

@@ -1,9 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { icons } from '../src/model';
-import { iconLabels } from '../src/IconPicker';
 import { openApp } from './helpers';
-
-const iconLabelOf = (icon: (typeof icons)[number]) => iconLabels[icon];
 
 test.beforeEach(async ({ page }) => {
   await openApp(page);
@@ -34,8 +31,9 @@ test('图标菜单可预览、键盘选择并同步到简历', async ({ page }, 
   const picker = page.getByRole('button', { name: /标题图标：/ });
   await picker.click();
   const menu = page.getByRole('listbox', { name: '标题图标选项' });
-  // 图标集同时供模块标题与基本信息字段使用，新增预设图标会扩展这个列表。
-  await expect(menu.getByRole('option')).toHaveCount(icons.length);
+  // 图标目录按页展示，不能为完整图标库一次创建全部 SVG。
+  await expect(menu.getByRole('option')).toHaveCount(60);
+  await expect(page.locator('.icon-pagination')).toContainText(`${icons.length} 个`);
   for (const name of [
     '无图标',
     '个人',
@@ -65,10 +63,11 @@ test('图标菜单可预览、键盘选择并同步到简历', async ({ page }, 
   await expect(page.locator('#resume-pages [data-module="summary"] h2 svg')).toHaveCount(1);
   await picker.press('ArrowDown');
   await expect(menu.getByRole('option', { name: '代码', exact: true })).toBeFocused();
+  const last = await menu.getByRole('option').last().getAttribute('aria-label');
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');
-  // End 跳到图标集最后一项。
-  await expect(picker).toHaveAccessibleName(`标题图标：${iconLabelOf(icons[icons.length - 1])}`);
+  // End 跳到当前页最后一项。
+  await expect(picker).toHaveAccessibleName(`标题图标：${last}`);
   await picker.click();
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
@@ -128,7 +127,9 @@ test('页眉页脚可修改关闭，切换模板后保留', async ({ page }) => 
   await page.getByLabel('页脚标识 / ID', { exact: true }).fill('候选编号：DEMO-001');
   await page.getByLabel('页码格式', { exact: true }).fill('第 {page} 页 / 共 {pages} 页');
   await expect(page.locator('#resume-pages .resume-eyebrow')).toHaveText('个人履历');
-  await expect(page.locator('#resume-pages .resume-footer')).toContainText('第 1 页 / 共 1 页');
+  await expect(page.locator('#resume-pages .resume-footer').first()).toContainText(
+    '第 1 页 / 共 2 页',
+  );
   await page.getByRole('button', { name: '模板', exact: true }).click();
   await page.getByRole('button', { name: '书简 居中抬头 · 经典沉稳' }).click();
   await expect(page.locator('#resume-pages .resume-eyebrow')).toBeVisible();

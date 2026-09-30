@@ -1,9 +1,43 @@
 import { test, expect } from '@playwright/test';
 import { sample } from '../src/model';
-import { openApp, saved } from './helpers';
+import { openApp, saved, ready } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await openApp(page);
+});
+
+test('信息字段统一字号、单项覆盖与恢复继承，排序和刷新后保留', async ({ page }) => {
+  const items = page.locator('#resume-pages .resume-contact-item');
+  await page.getByRole('combobox', { name: '姓名字号', exact: true }).selectOption('32');
+  await page.getByRole('combobox', { name: '求职意向字号', exact: true }).selectOption('16');
+  await expect(page.locator('#resume-pages h1')).toHaveCSS('font-size', '32px');
+  await expect(page.locator('#resume-pages .resume-role')).toHaveCSS('font-size', '16px');
+  await page.getByLabel('信息字段默认字号').selectOption('14');
+  await expect(items.first()).toHaveCSS('font-size', '14px');
+  await page.getByLabel('第 1 项字段字号').selectOption('18');
+  const phone = items.filter({ hasText: '联系电话' });
+  await expect(phone).toHaveCSS('font-size', '18px');
+  await expect(phone.locator('svg')).toHaveAttribute('width', '19');
+  await expect(items.nth(1)).toHaveCSS('font-size', '14px');
+  await ready(page);
+  const heights = await page.evaluate(() => [
+    (document.querySelector('.resume-measure .resume-header') as HTMLElement).offsetHeight,
+    (document.querySelector('#resume-pages .resume-header') as HTMLElement).offsetHeight,
+  ]);
+  expect(heights[0]).toBe(heights[1]);
+  await page.getByRole('button', { name: '下移第 1 项信息字段', exact: true }).click();
+  await expect(page.getByLabel('第 2 项字段字号')).toHaveValue('18');
+  await saved(page);
+  await page.reload();
+  await expect(page.getByRole('combobox', { name: '姓名字号', exact: true })).toHaveValue('32');
+  await expect(page.getByRole('combobox', { name: '求职意向字号', exact: true })).toHaveValue('16');
+  await expect(page.getByLabel('信息字段默认字号')).toHaveValue('14');
+  await expect(page.getByLabel('第 2 项字段字号')).toHaveValue('18');
+  await expect(phone).toHaveCSS('font-size', '18px');
+  await page.getByLabel('第 2 项字段字号').selectOption('');
+  await expect(phone).toHaveCSS('font-size', '14px');
+  await page.getByLabel('信息字段默认字号').selectOption('12');
+  await expect(phone).toHaveCSS('font-size', '12px');
 });
 
 test('基本信息字段可改名、换图标、删除与插入', async ({ page }) => {

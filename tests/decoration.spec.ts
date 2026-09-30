@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { openApp } from './helpers';
+import { openApp, importDocument, ready, exportFile, withOfflineHTML } from './helpers';
+import { createModule, createEntry, documentSchema, sample } from '../src/model';
+import { assertPDF } from './pdf';
 
 test.beforeEach(async ({ page }) => {
   await openApp(page);
@@ -80,3 +82,93 @@ test('过大的页脚不会覆盖正文并静默导出，重置后恢复', async
   await page.getByRole('button', { name: '页脚恢复默认样式', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
+
+for (const template of ['editorial', 'classic', 'compact'] as const) {
+  test(`${template} 关闭页脚与页码后，专业技能上浮且导出使用回收的正文空间`, async ({
+    page,
+  }, info) => {
+    const intro = createModule('text', 'intro');
+    intro.title = '个人简介';
+    intro.keepTogether = true;
+    intro.body = Array.from(
+      { length: 22 },
+      (_, i) => `简介 ${i + 1}：用于验证关闭页脚后的正文空间。`,
+    ).join('\n\n');
+    const education = createModule('education', 'education');
+    education.entries = [
+      {
+        ...createEntry(),
+        id: 'school',
+        organization: '示例大学',
+        degree: '本科',
+        major: '工业设计',
+        start: '2016.09',
+        end: '2020.06',
+        body: '- 主修课程：交互设计、设计研究、产品设计。',
+      },
+    ];
+    const skills = createModule('text', 'skills');
+    skills.title = '专业技能';
+    skills.keepTogether = true;
+    skills.body =
+      '- **设计**：用户研究 / 交互设计 / 视觉设计\n- **工具**：Figma / Sketch / Adobe Creative Suite\n- **技术**：HTML & CSS / React 基础 / 数据可视化';
+    const doc = documentSchema.parse({
+      ...sample,
+      profile: { ...sample.profile, name: '底部空间示例', role: '', fields: [], photo: '' },
+      theme: { ...sample.theme, template },
+      modules: [intro, education, skills],
+      pageDecoration: { ...sample.pageDecoration, footerText: '底部空间示例' },
+    });
+    await importDocument(page, doc);
+    const pages = page.locator('#resume-pages .resume-page');
+    await expect(pages).toHaveCount(2);
+    await expect(pages.nth(1).locator('[data-module="skills"]')).toBeVisible();
+    await expect(pages.first()).toHaveCSS('padding-bottom', '74px');
+    await page.getByRole('button', { name: '样式', exact: true }).click();
+    await page.getByLabel('显示页脚标识', { exact: true }).uncheck();
+    await ready(page);
+    await expect(pages).toHaveCount(2);
+    await expect(pages.first()).toHaveCSS('padding-bottom', '74px');
+    await page.getByLabel('显示页码', { exact: true }).uncheck();
+    await expect(pages).toHaveCount(1);
+    await expect(pages.first().locator('[data-module="skills"]')).toBeVisible();
+    await expect(pages.first()).toHaveCSS('padding-bottom', '20px');
+    await expect(page.locator('.resume-measure')).toHaveCSS('padding-bottom', '20px');
+    await expect(page.locator('#resume-pages .resume-footer')).toHaveCount(0);
+    const used = await pages
+      .locator('.resume-content')
+      .evaluate((element) => (element as HTMLElement).offsetHeight);
+    expect(used).toBeGreaterThan(994);
+    expect(used).toBeLessThanOrEqual(1048);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    const html = await exportFile(page, info, 'html', 'without-footer.html');
+    const pdf = await exportFile(page, info, 'pdf', 'without-footer.pdf');
+    await assertPDF(pdf, 1);
+    await withOfflineHTML(page, html, async (offline) => {
+      await expect(offline.locator('.resume-page')).toHaveCount(1);
+      await expect(offline.locator('[data-module="skills"]')).toBeVisible();
+      await expect(offline.locator('.resume-page')).toHaveCSS('padding-bottom', '20px');
+      await expect(offline.locator('.resume-footer')).toHaveCount(0);
+      await offline
+        .locator('.resume-page')
+        .screenshot({ path: info.outputPath('without-footer.png') });
+      const printed = info.outputPath('without-footer-print.pdf');
+      await offline.pdf({ path: printed, preferCSSPageSize: true, printBackground: true });
+      await assertPDF(printed, 1);
+    });
+    // 打印入口同样复制动态尺寸，不用旧的固定留白。
+    await page.evaluate(() => {
+      window.print = () => {
+        const paper = document.querySelector('.print-root .resume-page')!;
+        document.documentElement.dataset.printBottom = getComputedStyle(paper).paddingBottom;
+      };
+    });
+    await page.getByRole('button', { name: '导出简历', exact: true }).click();
+    await page.getByRole('button', { name: /打印 \/ 文字 PDF/ }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-print-bottom', '20px');
+    await page.getByLabel('显示页码', { exact: true }).check();
+    await expect(pages).toHaveCount(2);
+    await expect(pages.first()).toHaveCSS('padding-bottom', '74px');
+    await expect(pages.nth(1).locator('[data-module="skills"]')).toBeVisible();
+  });
+}

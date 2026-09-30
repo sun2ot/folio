@@ -13,6 +13,71 @@ import {
 import { parseImport } from './storage';
 
 describe('数据协议', () => {
+  it('新建示例包含离线仓库与指定论文卡片，并可无损往返', () => {
+    const entries = sample.modules.find((m) => m.field === 'projects')!.entries;
+    expect(entries[0].github).toMatchObject({
+      visible: true,
+      snapshot: { owner: 'folio-demo', name: 'atlas-workspace', fetchedAt: null, avatar: '' },
+    });
+    expect(entries[1].research).toMatchObject({
+      visible: true,
+      title: 'Diffusion-based contrastive learning for multimodal recommendation',
+      authorOrder: '第二作者兼通讯作者',
+      level: 'SCI 二区',
+      link: '10.1007/s10115-026-02735-z',
+      status: 'published',
+      openSource: 'open',
+    });
+    expect(parseImport(JSON.stringify(sample))).toEqual(sample);
+  });
+  it('信息字号可省略、统一设置与单项覆盖，校验字号边界并保留模板数据', () => {
+    const doc = structuredClone(sample);
+    doc.profile.infoSize = 14;
+    doc.profile.nameSize = 60;
+    doc.profile.roleSize = 16;
+    doc.profile.fields[0].size = 18;
+    expect(parseImport(JSON.stringify(doc))).toEqual(doc);
+    expect(applyTemplate(doc, 'compact').profile).toEqual(doc.profile);
+    for (const size of [8, 31, Infinity, '12']) {
+      expect(
+        documentSchema.safeParse({ ...doc, profile: { ...doc.profile, infoSize: size } }).success,
+      ).toBe(false);
+      expect(
+        documentSchema.safeParse({
+          ...doc,
+          profile: { ...doc.profile, fields: [{ ...doc.profile.fields[0], size }] },
+        }).success,
+      ).toBe(false);
+    }
+    delete doc.profile.infoSize;
+    delete doc.profile.nameSize;
+    delete doc.profile.roleSize;
+    delete doc.profile.fields[0].size;
+    expect(parseImport(JSON.stringify(doc))).toEqual(doc);
+  });
+  it('姓名与意向字号保留原默认样式，拒绝超过边界的覆盖', () => {
+    for (const [key, max] of [
+      ['nameSize', 60],
+      ['roleSize', 30],
+    ] as const) {
+      for (const size of [8, max + 1, Infinity, '14']) {
+        expect(
+          documentSchema.safeParse({ ...sample, profile: { ...sample.profile, [key]: size } })
+            .success,
+        ).toBe(false);
+      }
+    }
+  });
+  it('整模块不拆分设置可选、随模板与备份保存，并拒绝非布尔输入', () => {
+    const doc = structuredClone(sample);
+    doc.modules[0].keepTogether = true;
+    expect(parseImport(JSON.stringify(doc))).toEqual(doc);
+    expect(applyTemplate(doc, 'compact').modules[0].keepTogether).toBe(true);
+    expect(
+      documentSchema.safeParse({ ...doc, modules: [{ ...doc.modules[0], keepTogether: 'yes' }] })
+        .success,
+    ).toBe(false);
+  });
   it('示例数据及备份无损往返', () => {
     expect(parseImport(JSON.stringify(sample))).toEqual(sample);
   });

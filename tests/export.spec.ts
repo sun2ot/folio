@@ -12,9 +12,13 @@ test.beforeEach(async ({ page }) => {
 test('默认简历导出 A4 PDF，离线 HTML 包含字体图片且没有脚本', async ({ page }, info) => {
   const html = await exportFile(page, info, 'html', 'resume.html');
   const pdf = await exportFile(page, info, 'pdf', 'resume.pdf');
-  await assertPDF(pdf, 1);
+  await assertPDF(pdf, 2);
   await withOfflineHTML(page, html, async (offline) => {
-    await expect(offline.locator('.resume-page')).toHaveCount(1);
+    await expect(offline.locator('.resume-page')).toHaveCount(2);
+    await expect(offline.locator('.resume-repository')).toContainText('虚构示例');
+    await expect(offline.locator('.resume-research')).toContainText(
+      'Diffusion-based contrastive learning for multimodal recommendation',
+    );
     await expect(offline.locator('h1')).toHaveText(sample.profile.name);
     await expect(offline.locator('script')).toHaveCount(0);
     const avatar = offline.locator('.avatar-resource');
@@ -33,7 +37,7 @@ test('默认简历导出 A4 PDF，离线 HTML 包含字体图片且没有脚本'
     await offline.screenshot({ path: info.outputPath('offline-html.png'), fullPage: true });
     const printed = info.outputPath('print.pdf');
     await offline.pdf({ path: printed, preferCSSPageSize: true, printBackground: true });
-    await assertPDF(printed, 1);
+    await assertPDF(printed, 2);
   });
 });
 
@@ -56,13 +60,14 @@ test('无效导入保持当前文档，合法导入替换并显示正文', async
 
 test('超长模块提示并阻止排版导出', async ({ page }) => {
   await page.getByRole('button', { name: '关于我', exact: true }).click();
+  await page.getByLabel('保持整个模块在同一页').check();
   await page
     .getByLabel('Markdown 正文')
     .fill(Array.from({ length: 100 }, (_, i) => `- 第 ${i} 项内容`).join('\n'));
   await expect(page.getByRole('alert')).toContainText('超出一页');
   await page.getByRole('button', { name: '导出简历' }).click();
   await page.getByRole('button', { name: /保真 PDF/ }).click();
-  await expect(page.getByText('有模块超出一页，请拆分内容或减小字号后导出')).toBeVisible();
+  await expect(page.getByText('有内容块超出一页，请拆分段落 / 条目或减小字号后导出')).toBeVisible();
 });
 
 for (const [label, id] of [
@@ -74,8 +79,14 @@ for (const [label, id] of [
     const doc = await floatingDocument(page);
     doc.profile.name = '导出验证';
     doc.profile.nameColor = '#2c466b';
+    doc.profile.nameSize = 30;
     doc.profile.roleColor = '#7d4651';
+    doc.profile.roleSize = 14;
     doc.profile.fields[0].color = '#2f6b4f';
+    doc.profile.infoSize = 14;
+    doc.profile.fields[0].size = 18;
+    doc.profile.fields[0].icon = 'gear';
+    doc.modules[0].icon = 'lucide:Microscope';
     doc.theme.textColor = '#866339';
     doc.theme.font = 'inter';
     doc.modules[0].titleStyle.font = 'serif';
@@ -89,9 +100,14 @@ for (const [label, id] of [
     await expect(page.locator('#resume-pages .resume-page')).toHaveCount(2);
     const json = await exportFile(page, info, 'json', 'styled.json');
     expect(JSON.parse(await readFile(json, 'utf8')).profile).toMatchObject({
+      infoSize: 14,
+      nameSize: 30,
+      roleSize: 14,
       nameColor: '#2c466b',
       roleColor: '#7d4651',
-      fields: expect.arrayContaining([expect.objectContaining({ id: 'phone', color: '#2f6b4f' })]),
+      fields: expect.arrayContaining([
+        expect.objectContaining({ id: 'phone', color: '#2f6b4f', size: 18, icon: 'gear' }),
+      ]),
     });
     const html = await exportFile(page, info, 'html', 'floating.html');
     const pdf = await exportFile(page, info, 'pdf', 'floating.pdf');
@@ -99,10 +115,21 @@ for (const [label, id] of [
     await assertPDF(pdf, 2, markers);
     await withOfflineHTML(page, html, async (offline) => {
       await expect(offline.locator('h1')).toHaveCSS('color', 'rgb(44, 70, 107)');
+      await expect(offline.locator('h1')).toHaveCSS('font-size', '30px');
       await expect(offline.locator('.resume-role')).toHaveCSS('color', 'rgb(125, 70, 81)');
+      await expect(offline.locator('.resume-role')).toHaveCSS('font-size', '14px');
       await expect(offline.locator('.resume-contact-item').first()).toHaveCSS(
         'color',
         'rgb(47, 107, 79)',
+      );
+      await expect(offline.locator('.resume-contact-item').first()).toHaveCSS('font-size', '18px');
+      await expect(offline.locator('.resume-contact-item').nth(1)).toHaveCSS('font-size', '14px');
+      await expect(offline.locator('.resume-contact-item').first().locator('svg')).toHaveAttribute(
+        'width',
+        '19',
+      );
+      await expect(offline.locator('[data-module="summary"] h2 svg')).toHaveClass(
+        /lucide-microscope/,
       );
       for (const [selector, color, family, size] of [
         ['.resume-eyebrow', 'rgb(124, 25, 30)', 'Noto Serif SC', '14px'],

@@ -155,7 +155,7 @@ export default function App() {
       return notify(
         overflow.includes('页脚 / 页码')
           ? '页脚 / 页码超出底部留白，请缩小字号或缩短内容后导出'
-          : '有模块超出一页，请拆分内容或减小字号后导出',
+          : '有内容块超出一页，请拆分段落 / 条目或减小字号后导出',
       );
     setBusy('正在准备字体和图片…');
     try {
@@ -730,6 +730,7 @@ export default function App() {
                 ))}
                 <p className="hint">
                   {'{page}'} 为当前页，{'{pages}'} 为总页数。
+                  同时关闭页脚标识与页码后，底部预留空间会用于正文重新分页。
                 </p>
               </details>
             </div>
@@ -787,7 +788,7 @@ export default function App() {
               {overflow.filter((label) => label !== '页脚 / 页码').length > 0 && (
                 <div>
                   “{overflow.filter((label) => label !== '页脚 / 页码').join('、')}
-                  ”超出一页，请拆分模块或缩小字号后导出。
+                  ”的单段内容或条目超出一页，请拆分该内容或缩小字号；也可关闭整模块不拆分设置。
                 </div>
               )}
               {overflow.includes('页脚 / 页码') && (

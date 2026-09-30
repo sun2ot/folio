@@ -25,6 +25,16 @@ columns 为 1–3 列；infoWidth 为 280–678 CSS px。网格列使用 minmax(
 
 每项信息字段另外支持可选的 `color`，同时作用于字段名称、内容和图标；省略或空字符串表示跟随全局正文色。颜色与稳定 ID 一起保存，改名和排序不会丢失。
 
+字号为 v4 可选扩展：`profile.nameSize`（9–60，省略为 34px）、`profile.roleSize`（9–30，省略为 13px）、`profile.infoSize`（9–30，信息字段默认值，省略为 12px）与 `profile.fields[].size`（9–30，省略跟随 infoSize）。字段字号同时作用于标签和值；图标边长为实际字号 + 1px，保持原来的 12px 文字 / 13px 图标比例关系。单项覆盖按稳定 ID 保存，排序、导入、切换模板和撤销不丢失；「跟随默认」移除单项 size。姓名、意向和信息行都参与隐藏测量，改字号后重新分页，导出沿用相同 DOM 与 CSS。
+
+## 本地图标目录
+
+图标来自现有依赖 `lucide-react` 的成熟 SVG 组件，目录定义于 `src/icons.ts`，没有远程 SVG、图标字体或自定义 HTML。原有 none / user / briefcase / graduation / code / award / link / star / phone / mail / globe / github / calendar / flag / contact / clock / map 键保持对应图形；新增 pencil / trend / gear 分别映射 Pencil / TrendingUp / Settings。完整库使用 `lucide:<导出名称>`，例如 `lucide:Microscope`。名称直接使用库的英文 key，原有中文名称保留，常用中文关键词单独索引，不要求翻译全库。
+
+`iconSchema` 在 `documentSchema` 中验证键确实属于本地目录（最多 80 字），拒绝未知键、原型属性、任意 URL 等输入。此为 v4 的非破坏性扩展，已有键继续有效，不改存储键。更新图标依赖时须核对已开放键，不可静默删除旧键。
+
+`IconPicker` 使用原生 dialog 的顶层小窗，避免被滚动编辑器裁切，支持搜索、60 项分页、方向键网格导航、Home / End、Enter 与 Escape。中文覆盖常用主题，英文 key 与名称完整可搜；无匹配时明确提示，不自动替换图标。模块与信息字段通过同一 `SectionIcon` 同步渲染，导出保留内联 SVG；图标组件同步可用，分页与导出不需要等待远程加载。完整图标库增大应用脚本体积，但不增加独立 HTML / PDF 中未使用图标的体积。
+
 photo 是空字符串或 PNG/JPEG/WebP base64 data URL。shape 为 square/circle；x/y 为 0–100 的取景百分比，zoom 为 1–3。取景与纸张上的图片位置是两套独立状态。
 
 新建文档在读取不到已存文档时加载同源 `public/avatar.webp`，通过 readImage 标准化后写入 photo，单次会话缓存转换结果。已有文档不自动补头像，明确移除后的空字符串仍然保留；用户可通过「使用默认头像」重新应用。`public/folio.svg` 仅用于工作台品牌与 favicon，不进入简历内容或图片导出协议。
@@ -48,7 +58,7 @@ photo 是空字符串或 PNG/JPEG/WebP base64 data URL。shape 为 square/circle
 
 `pageDecoration` 保留各自的内容、格式与可见开关，新增可选的 `headerStyle`、`footerStyle`、`pageNumberStyle`，均为 `{ color?, font?, size? }`。省略 / 空串颜色继承 `theme.textColor`，省略字体继承 `theme.font`；字号范围 9–30 CSS px，省略时为 9px。重置清空样式，单独恢复颜色不会改变字体与字号。此为 v4 可选扩展，已有文档不迁移，保存、备份、模板切换与所有导出保留覆盖。
 
-页眉参与基本信息高度测量；页脚和页码独立排版，字体加载与测量覆盖各自文本。底部留白为 74px，页脚距底部 20px，高度超过剩余 54px 时提示并阻止排版导出，JSON 备份不受影响。预览、HTML、PDF 与打印共用文字样式与边界检查。
+页眉参与基本信息高度测量；页脚和页码独立排版，字体加载与测量覆盖各自文本。任一页脚 / 页码开关开启时，底部留白为 74px（20px 边缘安全距离 + 54px 页脚预留）；两者都关闭后，只保留 20px 边缘安全距离，回收 54px 给正文并重新分页。页脚距底部 20px，显示时高度超过预留的 54px 会提示并阻止排版导出，JSON 备份不受影响。预览、测量、HTML、PDF 与打印共用动态尺寸、文字样式与边界检查。
 
 ## 分割线
 
@@ -73,9 +83,10 @@ photo 是空字符串或 PNG/JPEG/WebP base64 data URL。shape 为 square/circle
 - id：1–80 位字母数字、下划线、连字符；实例唯一。
 - field：跨模板唯一语义键，允许点号。内置 summary / experience / projects / education / skills；新增组件使用 custom.<uuid>。
 - kind：仅 text / experience / projects / education。列表由 Markdown 支持，不再提供列表或二维码章节组件。
-- title / icon：标题与本地 Lucide 图标。图标集同时供模块标题与基本信息字段使用，ID 为 none / user / briefcase / graduation / code / award / link / star / phone / mail / globe / github / calendar / flag / contact / clock / map。
+- title / icon：标题与本地 Lucide 图标。图标集同时供模块标题与基本信息字段使用，ID 约定见「本地图标目录」。
 - titleStyle / bodyStyle：font（sans/serif/inter/source）、size（9–30 px）、color（空串分别继承全局标题色 / theme.textColor）。
 - width：full 或 half；两个相邻 half 组成一行。visible 决定是否排版，pageBreak 在模块前换页。
+- keepTogether：可选布尔值，省略 / false 使用智能分页，true 保持整个模块同页。仅影响排版，不改变正文或顺序；模板、保存与 JSON 备份保留设置。
 - body：仅 text 使用，最多 30,000 字；text 的 entries 必须为空。
 - entries：经历组件使用，最多 30 条；经历组件的模块 body 必须为空。
 - entryLayout：left-right 或 left-center-right。
@@ -110,6 +121,30 @@ avatar 是作者头像的本地副本：`repositoryAPI` 校验 `owner.id` 为正
 
 卡片一旦保存即为普通文档数据：预览、打印、PDF、HTML 与 JSON 备份都不再联网，Star 与头像都是写入时的快照值。API 响应经 `repositoryAPI` 校验后才转换，超过 500 KB 的响应被拒绝。
 
+## 科研卡片
+
+项目条目支持可选的 `entry.research`，与 `entry.github` 独立，可同时显示。这是 v4 可选扩展，省略时不渲染，不改变存储键或旧文档。新卡片使用 `createResearch()`，由 `researchSchema` 随 `documentSchema` 校验。新建文档示例默认在项目条目中开启虚构 GitHub 卡片，并以独立条目展示指定论文的科研卡片；已有文档、用户隐藏后的卡片不自动补齐。默认值是本地常量，不查询 GitHub 或 DOI。
+
+| 字段        | 约定                                                                                                                                                                                   |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| visible     | 显示开关；关闭保留所有填写内容                                                                                                                                                         |
+| kind        | paper-en（英文论文）/ paper-zh（中文论文）/ fund（基金）/ patent（专利）                                                                                                               |
+| title       | 纯文本，最多 500 字，支持中英混排与双语换行；空白名称不渲染卡片                                                                                                                        |
+| venue       | 纯文本，最多 200 字；期刊 / 会议名称，基金为资助机构 / 计划，专利为授予机构                                                                                                            |
+| authorOrder | 纯文本，最多 200 字，可写第一作者（1/5）、共同第一作者、通讯作者或项目负责人                                                                                                           |
+| level       | 自定义纯文本标签，最多 100 字；SCI 分区、CCF-A/B/C、EI、核心、基金级别与专利类型仅为建议，不据此推断或查询评级                                                                         |
+| openSource  | 空串（隐藏）/ open（已开源）/ closed（未开源）                                                                                                                                         |
+| status      | 空串（隐藏）/ published（出版）/ proofreading（校稿）/ revision（反修）/ review（外审）/ submitted（投稿）/ applied（申请 / 申报）/ funded（立项）/ completed（结项）/ granted（授权） |
+| link        | 空串（隐藏）、DOI、`doi:10.…`、doi.org / dx.doi.org 解析器地址或完整 HTTP / HTTPS URL，最多 2000 字                                                                                    |
+
+例如：`{ visible: true, kind: "paper-en", title: "Local-first Research · 本地研究", venue: "Example Research Conference", authorOrder: "共同第一作者（1/5）", level: "SCI Q1（JCR） · CCF-A", openSource: "open", status: "published", link: "10.1234/example" }`。原有项目名称、角色、日期与 Markdown 详情可继续填写，也可留空，仅展示科研卡片。
+
+`researchURL()` 将 DOI 转为 HTTPS doi.org 地址；DOI 后缀按路径编码，避免问号或井号变成查询 / 片段。普通 URL 保留查询和片段，但拒绝凭据、脚本、data、file、协议相对地址和内部空白 / 控制字符。编辑中的无效地址仅保留在输入框并显示提示，不覆盖已保存链接；清空移除链接。固定字段通过 React 文本渲染，不解析 HTML / Markdown。
+
+成果名称突出，期刊 / 会议在下一行，作者、级别与开源信息自然换行。级别使用浅底标签，状态使用细边框；全部文字与图标继承模块正文色（再继承全局正文色），不使用固定状态墨色。只有链接图标带超链接与可访问名称，纸面不出现 URL。预览、测量、HTML、PDF 和打印共用 `ResearchCard` 与 `resume.css`；半宽长文本不截断。不查询 DOI 或远程论文信息，所有保存与导出保持离线。
+
+保真 PDF 在同一无缩放临时 DOM 上读取链接矩形，按页换算到 A4 毫米坐标并附加 URL 注释；科研图标、仓库和 Markdown 的 HTTP / HTTPS / mailto / tel 链接可点击，跨页坐标不从预览滚动区域读取。原生打印和 HTML 保留 DOM 中的链接。
+
 ## 页眉与页脚
 
 pageDecoration 包含 headerVisible/headerText、footerVisible/footerText、pageNumberVisible/pageNumberFormat。三组独立开关。headerText 最多 200 字，仅首页显示；footerText 最多 100 字，每页显示；pageNumberFormat 最多 60 字，替换 {page} 为当前页、{pages} 为总页数。均为纯文本，不解释 HTML。模板不得覆盖这些设置。
@@ -126,9 +161,13 @@ pageDecoration 包含 headerVisible/headerText、footerVisible/footerText、page
 
 ## 分页合同
 
-页面固定 794 × 1122，内边距上 54、左右 58、下 74；内容高度 994、宽 678。compact 顶部色带使用绝对定位装饰，不改变页面坐标或内容尺寸。
+页面固定 794 × 1122，内边距上 54、左右 58，内容宽 678。`pageGeometry()` 根据页脚 / 页码的显示开关统一计算底部空间：任一开启时下边距 74、内容高度 994；两者关闭时下边距 20、内容高度 1048。相同 CSS 变量作用于纸张与测量容器，分页使用对应内容高度，导出校验读取相同高度，不再固定比较 994。compact 顶部色带使用绝对定位装饰，不改变页面坐标或内容尺寸。
 
-Profile 仅首页出现，章节以整模块/双栏行分页，不拆条目或长段落。超长模块需拆为多个模块。隐藏测量与可见内容使用相同样式与宽度，等待字体和图片后测量。超出内容区时阻止排版导出，不静默裁切。
+Profile 仅首页出现。默认在完整经历条目、Markdown 段落或顶层列表项之间分页，模块标题只在首次出现时显示，续页直接衔接正文，不添加续页标识，也不重复或漏掉正文。小标题与随后段落 / 第一条列表项组合为一块，嵌套列表随父项保留；有序列表续页保留起始编号。双栏各自续排，某栏结束后另一栏仍保持原列。pageBreak 只作用于模块开始，keepTogether 为 true 时整模块搬移；不可分内容块仍过高时明确报错并阻止排版导出，不静默裁切。已完成列可以留空，不把之后的模块提前穿插以填空。
+
+`markdownUnits()` 从唯一 `markdown()` 入口已经通过 DOMPurify 白名单的 HTML 划分内容块，`markdownFragment()` 只组合这些已清洗节点并再次通过 `markdown()` 交付 HTML；不放宽标签或属性，不重新解析引用定义，也不修改文档中的原始 Markdown。经历条目包含完整详情和卡片，整体保留。分页片段仅是派生渲染状态，原模块 / 条目 ID、正文、排序与 JSON 均保持稳定；点击续页仍编辑原模块。
+
+隐藏测量与可见内容使用同宽的实际片段和样式，续页测量同样移除模块标题；二分查找最大可容纳片段，单次排版缓存测量值并及时移除临时 DOM。去掉祖先预览缩放后保留亚像素高度，仅向上取到 0.01px，避免多行整数取整累计导致提前换页。等待全部字体和图片后再测量；预览、PDF、HTML 与原生打印复用同一分页结果与 DOM，保真 PDF 仍逐页捕获，不切长画布。
 
 浮动图片不计入流式高度，但其最大有效 page 决定总页数下限。导出仍等待当前分页完成、字体就绪、图片 decode，并逐页串行生成 PDF。
 

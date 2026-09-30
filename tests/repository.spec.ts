@@ -1,10 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { openApp, saved } from './helpers';
+import { openApp, saved, importDocument } from './helpers';
+import { emptyProjectCards } from './fixtures';
 
 test.beforeEach(async ({ page }) => {
   await openApp(page);
+  await importDocument(page, emptyProjectCards());
 });
 
 test('手动填写与离线快照不请求外部头像，关闭联网后禁止获取头像', async ({ page }) => {

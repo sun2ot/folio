@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { markdown } from './markdown';
+import { markdown, markdownUnits, markdownFragment } from './markdown';
 
 describe('安全 Markdown 与组合格式', () => {
   it('保留嵌套的加粗、斜体、高亮与行内代码', () => {
@@ -19,5 +19,41 @@ describe('安全 Markdown 与组合格式', () => {
     expect(html).toContain('<ol>');
     expect(html).toContain('<ul>');
     expect(html.match(/<li>/g)).toHaveLength(4);
+  });
+  it('分页沿用安全白名单，保留嵌套格式与链接定义', () => {
+    const parts = markdownUnits(
+      '**==成果==**\n\n[链接][paper]\n\n[paper]: https://example.test/paper\n\n<script>alert(1)</script><img src="https://evil.test/a" style="color:red">',
+    );
+    const html = markdownFragment(parts);
+    expect(html).toContain('<strong><mark>成果</mark></strong>');
+    expect(html).toContain('href="https://example.test/paper"');
+    expect(html).not.toMatch(/<script|<img|style=/);
+  });
+  it('列表按父项划分，续页保留有序编号与嵌套列表', () => {
+    const parts = markdownUnits('3. 项目三\n   - 子项甲\n   - 子项乙\n4. 项目四\n5. 项目五');
+    expect(parts).toHaveLength(3);
+    expect(markdownFragment(parts, 0, 1)).toContain('<ul>');
+    expect(markdownFragment(parts, 1, 3)).toMatch(/^<ol start="4">/);
+    expect(markdownFragment(parts, 1, 3)).not.toContain('项目三');
+    expect(markdownFragment(parts, 1, 3)).toContain('项目五');
+  });
+  it('小标题与紧随段落或第一条列表项保持同一分页单位', () => {
+    const parts = markdownUnits('### 研究方法\n\n解释段落\n\n### 研究成果\n\n- 成果一\n- 成果二');
+    expect(parts).toHaveLength(3);
+    expect(markdownFragment(parts, 0, 1)).toContain('<h3>研究方法</h3>');
+    expect(markdownFragment(parts, 0, 1)).toContain('解释段落');
+    expect(markdownFragment(parts, 1, 2)).toContain('<h3>研究成果</h3>');
+    expect(markdownFragment(parts, 1, 2)).toContain('成果一');
+    expect(markdownFragment(parts, 2, 3)).not.toContain('研究成果');
+  });
+  it('分页组合的 HTML 仍经过唯一 Markdown 安全入口', () => {
+    expect(
+      markdownFragment([
+        {
+          before: '',
+          html: '<p style="color:red" onclick="alert(1)">内容</p><script>alert(1)</script><img src="https://evil.test/a">',
+        },
+      ]),
+    ).not.toMatch(/<script|<img|style=|onclick=/);
   });
 });

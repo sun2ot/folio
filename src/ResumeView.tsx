@@ -1,4 +1,4 @@
-import { memo, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Github } from 'lucide-react';
 import {
   fontFamilies,
@@ -8,13 +8,21 @@ import {
   fitPlacement,
   type Placement,
   type Resume,
-  type Module,
   type DecorationStyle,
 } from './model';
 import { Avatar, SectionIcon } from './ResumePrimitives';
-import { markdown } from './markdown';
+import { markdown, markdownUnits, markdownFragment } from './markdown';
 import { repositoryURL } from './repository';
-import { rowsFor, paginate, type Row } from './pagination';
+import { ResearchCard } from './ResearchCard';
+import {
+  rowsFor,
+  paginate,
+  pageGeometry,
+  FOOTER_RESERVE,
+  type Row,
+  type PageModule,
+  type ContentMeasure,
+} from './pagination';
 
 function decorationStyle(style?: DecorationStyle): CSSProperties {
   return {
@@ -55,13 +63,21 @@ const Profile = memo(function Profile({ doc }: { doc: Resume }) {
             {doc.pageDecoration.headerText}
           </div>
         )}
-        <h1 style={p.nameColor ? { color: p.nameColor } : undefined}>{p.name || '你的姓名'}</h1>
-        <p className="resume-role" style={{ color: p.roleColor || undefined }}>
+        <h1 style={{ color: p.nameColor || undefined, fontSize: p.nameSize }}>
+          {p.name || '你的姓名'}
+        </h1>
+        <p
+          className="resume-role"
+          style={{ color: p.roleColor || undefined, fontSize: p.roleSize }}
+        >
           {p.role}
         </p>
         <div
           className="resume-contact"
-          style={{ gridTemplateColumns: `repeat(${p.columns}, minmax(0, 1fr))` }}
+          style={{
+            gridTemplateColumns: `repeat(${p.columns}, minmax(0, 1fr))`,
+            fontSize: p.infoSize,
+          }}
         >
           {p.fields
             .filter((field) => field.value)
@@ -69,9 +85,9 @@ const Profile = memo(function Profile({ doc }: { doc: Resume }) {
               <div
                 className="resume-contact-item"
                 key={field.id}
-                style={{ color: field.color || undefined }}
+                style={{ color: field.color || undefined, fontSize: field.size }}
               >
-                <SectionIcon name={field.icon} size={13} />
+                <SectionIcon name={field.icon} size={(field.size ?? p.infoSize ?? 12) + 1} />
                 <span>
                   {field.label}：{field.value}
                 </span>
@@ -82,20 +98,33 @@ const Profile = memo(function Profile({ doc }: { doc: Resume }) {
     </header>
   );
 });
-const Block = memo(function Block({ item }: { item: Module }) {
+const Block = memo(function Block({ item }: { item: PageModule }) {
   const title = item.titleStyle.color || undefined;
+  const units = useMemo(
+    () => (item.kind === 'text' ? markdownUnits(item.body) : []),
+    [item.kind, item.body],
+  );
+  const fragment = item.fragment;
+  const entries = fragment ? item.entries.slice(fragment.from, fragment.to) : item.entries;
   return (
-    <section className="resume-section" data-module={item.id}>
-      <h2
-        style={{
-          fontFamily: fontFamilies[item.titleStyle.font],
-          fontSize: item.titleStyle.size,
-          color: title,
-        }}
-      >
-        <SectionIcon name={item.icon} color={title} />
-        <span>{item.title}</span>
-      </h2>
+    <section
+      className="resume-section"
+      data-module={item.id}
+      data-continued={fragment?.continued || undefined}
+      style={fragment ? { gridColumn: fragment.column + 1 } : undefined}
+    >
+      {!fragment?.continued && (
+        <h2
+          style={{
+            fontFamily: fontFamilies[item.titleStyle.font],
+            fontSize: item.titleStyle.size,
+            color: title,
+          }}
+        >
+          <SectionIcon name={item.icon} color={title} />
+          <span>{item.title}</span>
+        </h2>
+      )}
       <div
         className="resume-body"
         style={{
@@ -105,9 +134,14 @@ const Block = memo(function Block({ item }: { item: Module }) {
         }}
       >
         {item.kind === 'text' ? (
-          <div className="markdown" dangerouslySetInnerHTML={{ __html: markdown(item.body) }} />
+          <div
+            className="markdown"
+            dangerouslySetInnerHTML={{
+              __html: markdownFragment(units, fragment?.from, fragment?.to),
+            }}
+          />
         ) : (
-          item.entries.map((entry) => {
+          entries.map((entry) => {
             const details =
               item.kind === 'education'
                 ? [entry.degree + (entry.studyMode ? `（${entry.studyMode}）` : ''), entry.major]
@@ -139,6 +173,9 @@ const Block = memo(function Block({ item }: { item: Module }) {
                   className="markdown"
                   dangerouslySetInnerHTML={{ __html: markdown(entry.body) }}
                 />
+                {item.kind === 'projects' && entry.research && (
+                  <ResearchCard card={entry.research} />
+                )}
                 {item.kind === 'projects' && entry.github.visible && entry.github.snapshot && (
                   <a
                     className="resume-repository"
@@ -374,13 +411,60 @@ export function ResumeView({
         Array.from(root.parentElement!.querySelectorAll('img')).map((img) => img.decode()),
       );
       if (!live) return;
-      // offsetHeight stays in layout pixels even when the preview is zoomed.
-      const heights = Array.from(root.querySelectorAll<HTMLElement>(':scope > .resume-row')).map(
-        (e) => e.offsetHeight,
-      );
-      const header = root.querySelector<HTMLElement>('.resume-header')!.offsetHeight;
-      const result = paginate(rowsFor(doc.modules), heights, header, doc.theme.spacing);
-      if (header > 994) result.oversized.push('基本信息');
+      const rows = rowsFor(doc.modules);
+      const layoutHeight = (element: HTMLElement) => {
+        const rect = element.getBoundingClientRect();
+        // 去掉祖先预览缩放，保留小数；只向上取百分之一像素，避免整数累计造成过早换页。
+        return Math.ceil(((rect.height * element.offsetWidth) / rect.width) * 100) / 100;
+      };
+      const renderedRows = [...root.querySelectorAll<HTMLElement>(':scope > .resume-row')];
+      const measures: ContentMeasure[] = rows.map((row, index) => {
+        const blocks = [
+          ...renderedRows[index].querySelectorAll<HTMLElement>(':scope > .resume-section'),
+        ];
+        const parts = row.map((item) => (item.kind === 'text' ? markdownUnits(item.body) : []));
+        const cache = new Map<string, number>();
+        return {
+          counts: row.map((item, column) =>
+            item.kind === 'text' ? parts[column].length : item.entries.length,
+          ),
+          height: (column, from, to) => {
+            const key = `${column}:${from}:${to}`;
+            const cached = cache.get(key);
+            if (cached !== undefined) return cached;
+            // 在相同宽度、模板和字体下测量实际片段，避免列表边距与跨页片段估算误差。
+            const holder = renderedRows[index].cloneNode(false) as HTMLElement;
+            const block = blocks[column].cloneNode(true) as HTMLElement;
+            block.style.gridColumn = String(column + 1);
+            if (from > 0) block.querySelector('h2')!.remove();
+            const body = block.querySelector<HTMLElement>('.resume-body')!;
+            if (row[column].kind === 'text') {
+              body.querySelector<HTMLElement>('.markdown')!.innerHTML = markdownFragment(
+                parts[column],
+                from,
+                to,
+              );
+            } else {
+              [...body.children].forEach((entry, entryIndex) => {
+                if (entryIndex < from || entryIndex >= to) entry.remove();
+              });
+            }
+            holder.append(block);
+            root.append(holder);
+            try {
+              const height = layoutHeight(holder);
+              cache.set(key, height);
+              return height;
+            } finally {
+              holder.remove();
+            }
+          },
+        };
+      });
+      const header = layoutHeight(root.querySelector<HTMLElement>('.resume-header')!);
+      const geometry = pageGeometry(doc.pageDecoration);
+      const result = paginate(rows, measures, header, doc.theme.spacing, geometry.contentHeight);
+      if (header > geometry.contentHeight) result.oversized.push('基本信息');
       const mediaPage = Math.max(
         1,
         doc.profile.photo && doc.media.photo.visible ? doc.media.photo.page : 1,
@@ -394,7 +478,7 @@ export function ResumeView({
         number.textContent = doc.pageDecoration.pageNumberFormat
           .replaceAll('{page}', String(result.pages.length))
           .replaceAll('{pages}', String(result.pages.length));
-      if (footer && footer.offsetHeight > 54) result.oversized.push('页脚 / 页码');
+      if (footer && footer.offsetHeight > FOOTER_RESERVE) result.oversized.push('页脚 / 页码');
       setPages(result.pages);
       setReady(true);
       onReady(result.pages.length, result.oversized);
@@ -406,10 +490,13 @@ export function ResumeView({
       live = false;
     };
   }, [doc, onReady]);
+  const geometry = pageGeometry(doc.pageDecoration);
   const style = {
     '--text-color': doc.theme.textColor,
     '--title-color': doc.theme.titleColor || doc.theme.textColor,
     '--section-gap': `${doc.theme.spacing}px`,
+    '--page-bottom-padding': `${geometry.paddingBottom}px`,
+    '--content-height': `${geometry.contentHeight}px`,
     fontFamily: fontFamilies[doc.theme.font],
   } as CSSProperties;
   for (const key of Object.keys(dividerLabels) as DividerKey[]) {

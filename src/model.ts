@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { repositorySchema } from './repository';
+import { researchSchema } from './research';
+import { iconSchema, type IconId } from './icons';
+export { icons, type IconId } from './icons';
 
 export const fontIds = ['sans', 'serif', 'inter', 'source'] as const;
 export const fonts = {
@@ -14,27 +17,7 @@ export const fontFamilies = {
   inter: 'Inter, "Noto Sans SC", sans-serif',
   source: '"Source Serif 4", "Noto Serif SC", serif',
 };
-export const icons = [
-  'none',
-  'user',
-  'briefcase',
-  'graduation',
-  'code',
-  'award',
-  'link',
-  'star',
-  'phone',
-  'mail',
-  'globe',
-  'github',
-  'calendar',
-  'flag',
-  'contact',
-  'clock',
-  'map',
-] as const;
 export const kinds = ['text', 'experience', 'projects', 'education'] as const;
-export type IconId = (typeof icons)[number];
 /** 基本信息字段是可编辑列表，这里只提供预设：标签与图标都随文档保存。 */
 export const infoFieldPresets = [
   { key: 'phone', label: '联系电话', icon: 'phone' },
@@ -130,6 +113,7 @@ const entrySchema = z.object({
   end: short,
   body: z.string().max(30_000),
   github: z.object({ visible: z.boolean(), snapshot: repositorySchema.nullable() }),
+  research: researchSchema.optional(),
 });
 export type Entry = z.infer<typeof entrySchema>;
 export const entryFields = {
@@ -170,8 +154,9 @@ const infoFieldSchema = z.object({
   id: identifier,
   label: z.string().min(1).max(60),
   value: short,
-  icon: z.enum(icons),
+  icon: iconSchema,
   color: color.optional(),
+  size: z.number().min(9).max(30).optional(),
 });
 export type InfoField = z.infer<typeof infoFieldSchema>;
 export function createInfoField(preset?: { label: string; icon: IconId }): InfoField {
@@ -188,7 +173,7 @@ export const moduleSchema = z.object({
   field: z.string().regex(/^[\w.-]{1,80}$/),
   kind: z.enum(kinds),
   title: short,
-  icon: z.enum(icons),
+  icon: iconSchema,
   body: z.string().max(30_000),
   titleStyle: typography,
   bodyStyle: typography,
@@ -197,6 +182,7 @@ export const moduleSchema = z.object({
   entryLayout: z.enum(['left-right', 'left-center-right']),
   visible: z.boolean(),
   pageBreak: z.boolean(),
+  keepTogether: z.boolean().optional(),
 });
 export const documentSchema = z
   .object({
@@ -205,10 +191,13 @@ export const documentSchema = z
     profile: z.object({
       name: short,
       nameColor: color,
+      nameSize: z.number().min(9).max(60).optional(),
       role: short,
       roleColor: color.optional(),
+      roleSize: z.number().min(9).max(30).optional(),
       fields: z.array(infoFieldSchema).max(30),
       columns: z.number().int().min(1).max(3),
+      infoSize: z.number().min(9).max(30).optional(),
       infoWidth: z.number().min(280).max(678),
       photo: image,
       shape: z.enum(['square', 'circle']),
@@ -414,6 +403,34 @@ export const sample: Resume = {
           start: '2023',
           end: '2024',
           body: '为分布式团队设计轻量、高效的协作体验。主导信息架构重构与交互设计，用户满意度达到 **4.8 / 5**。\n- 将新用户首次任务完成时间缩短 **40%**。',
+          github: {
+            visible: true,
+            snapshot: {
+              owner: 'folio-demo',
+              name: 'atlas-workspace',
+              description: '虚构示例：轻量的团队协作与任务管理平台。',
+              stars: 128,
+              forks: 16,
+              language: 'TypeScript',
+              avatar: '',
+              fetchedAt: null,
+            },
+          },
+        },
+        {
+          ...createEntry(),
+          id: 'research-1',
+          research: {
+            visible: true,
+            kind: 'paper-en',
+            title: 'Diffusion-based contrastive learning for multimodal recommendation',
+            venue: 'Knowledge and Information Systems',
+            authorOrder: '第二作者兼通讯作者',
+            level: 'SCI 二区',
+            status: 'published',
+            openSource: 'open',
+            link: '10.1007/s10115-026-02735-z',
+          },
         },
       ],
     },

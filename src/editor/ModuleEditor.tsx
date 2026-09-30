@@ -4,6 +4,7 @@ import { entryFields, createEntry, type Entry, type Resume, type Module } from '
 import { IconPicker } from '../IconPicker';
 import { RepositoryEditor } from '../RepositoryEditor';
 import { ColorField, FontSelect } from './TypographyControls';
+import { ResearchEditor } from './ResearchEditor';
 
 function MarkdownEditor({
   value,
@@ -187,6 +188,12 @@ export function ModuleEditor({
                   onChange={(body) => change({ body })}
                 />
                 {item.kind === 'projects' && (
+                  <ResearchEditor
+                    value={entry.research}
+                    onChange={(research) => change({ research })}
+                  />
+                )}
+                {item.kind === 'projects' && (
                   <RepositoryEditor
                     value={entry.github}
                     onChange={(github) => change({ github })}
@@ -266,6 +273,15 @@ export function ModuleEditor({
             </div>
           </div>
         ))}
+        <label className="check-field">
+          <input
+            type="checkbox"
+            checked={item.keepTogether ?? false}
+            onChange={(e) => patch({ keepTogether: e.target.checked })}
+          />{' '}
+          保持整个模块在同一页
+        </label>
+        <p className="hint">默认在完整条目、段落或列表项之间智能分页，跨页直接衔接正文。</p>
         <label className="check-field">
           <input
             type="checkbox"

@@ -5,9 +5,15 @@ import { fileURLToPath } from 'node:url';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 type Marker = { page: number; x: number; y: number; color: readonly [number, number, number] };
+type Link = { page: number; url: string; left: number; top: number; width: number; height: number };
 
 /** 读取并逐页渲染真实 PDF；文件头和下载成功无法发现空白页或第二页坐标偏移。 */
-export async function assertPDF(file: string, pages: number, markers: Marker[] = []) {
+export async function assertPDF(
+  file: string,
+  pages: number,
+  markers: Marker[] = [],
+  links: Link[] = [],
+) {
   const pdfRoot = new URL('../../', import.meta.resolve('pdfjs-dist/legacy/build/pdf.mjs'));
   const loading = getDocument({
     data: new Uint8Array(await readFile(file)),
@@ -26,6 +32,23 @@ export async function assertPDF(file: string, pages: number, markers: Marker[] =
       expect(Math.abs((original.width * 25.4) / 72 - 210)).toBeLessThan(0.3);
       expect(Math.abs((original.height * 25.4) / 72 - 297)).toBeLessThan(0.3);
       const viewport = page.getViewport({ scale: 794 / original.width });
+      const annotations = await page.getAnnotations();
+      for (const link of links.filter((value) => value.page === n)) {
+        const annotation = annotations.find(
+          (value) => value.subtype === 'Link' && value.url === link.url,
+        );
+        expect(annotation, `第 ${n} 页应保留 ${link.url}`).toBeDefined();
+        const [left, bottom, right, top] = annotation!.rect;
+        const [x1, y1] = viewport.convertToViewportPoint(left, bottom);
+        const [x2, y2] = viewport.convertToViewportPoint(right, top);
+        for (const [actual, expected] of [
+          [Math.min(x1, x2), link.left],
+          [Math.min(y1, y2), link.top],
+          [Math.abs(x2 - x1), link.width],
+          [Math.abs(y2 - y1), link.height],
+        ])
+          expect(Math.abs(actual - expected), `第 ${n} 页链接图标位置`).toBeLessThan(2);
+      }
       const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
       const context = canvas.getContext('2d');
       // PDF.js 的声明使用浏览器类型，Node 端采用兼容的原生 Canvas 实现。

@@ -1,42 +1,5 @@
-import {
-  UserRound,
-  BriefcaseBusiness,
-  GraduationCap,
-  CodeXml,
-  Award,
-  Link,
-  Star,
-  Phone,
-  Mail,
-  MapPin,
-  Globe,
-  Github,
-  CalendarDays,
-  Flag,
-  ContactRound,
-  Clock,
-} from 'lucide-react';
+import { iconMap } from './icons';
 import type { IconId, Resume } from './model';
-
-const iconMap: Record<IconId, typeof UserRound | null> = {
-  none: null,
-  user: UserRound,
-  briefcase: BriefcaseBusiness,
-  graduation: GraduationCap,
-  code: CodeXml,
-  award: Award,
-  link: Link,
-  star: Star,
-  phone: Phone,
-  mail: Mail,
-  globe: Globe,
-  github: Github,
-  calendar: CalendarDays,
-  flag: Flag,
-  contact: ContactRound,
-  clock: Clock,
-  map: MapPin,
-};
 export function SectionIcon({
   name,
   size = 16,

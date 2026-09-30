@@ -26,7 +26,7 @@ test('子路径部署能加载默认图片、字体和导出动态模块', async
   );
   const html = await exportFile(page, info, 'html', 'subpath.html');
   await withOfflineHTML(page, html, async (offline) => {
-    await expect(offline.locator('.resume-page')).toHaveCount(1);
+    await expect(offline.locator('.resume-page')).toHaveCount(2);
     await expect(offline.locator('h1')).not.toBeEmpty();
     expect(
       await offline.evaluate(() => [...document.fonts].some((face) => face.status === 'loaded')),
