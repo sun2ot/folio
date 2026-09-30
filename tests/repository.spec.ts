@@ -6,13 +6,37 @@ test.beforeEach(async ({ page }) => {
   await openApp(page);
 });
 
+test('手动填写与离线快照不请求外部头像，关闭联网后禁止获取头像', async ({ page }) => {
+  const external: string[] = [];
+  await page.route('https://**', async (route) => {
+    external.push(route.request().url());
+    await route.abort();
+  });
+  await page.getByRole('button', { name: '精选项目', exact: true }).click();
+  const editor = page.locator('details.repository-editor').first();
+  await editor.locator('summary').click();
+  await editor.getByLabel('显示仓库卡片').check();
+  await editor.getByRole('textbox', { name: /GitHub 链接/ }).fill('sun2ot/folio');
+  await editor.getByRole('button', { name: '读取离线仓库快照' }).click();
+  await editor.getByRole('button', { name: /^sun2ot\/folio/ }).click();
+  await expect(page.locator('#resume-pages .resume-repository')).toBeVisible();
+  await expect(editor.getByRole('button', { name: '获取作者头像' })).toBeDisabled();
+  await editor.getByRole('button', { name: '手动填写卡片' }).click();
+  await expect(editor.getByRole('status')).toContainText('已保存');
+  expect(external).toEqual([]);
+});
+
 test('侧栏版权入口指向仓库与作者博客', async ({ page }) => {
   const links = page.locator('.author-links a');
   await expect(links).toHaveCount(2);
   await expect(links.nth(0)).toHaveAttribute('href', 'https://github.com/sun2ot/folio');
-  await expect(links.nth(0)).toContainText('sun2ot');
+  await expect(links.nth(0)).toHaveAccessibleName('GitHub 仓库，作者 sun2ot');
   await expect(links.nth(1)).toHaveAttribute('href', 'https://abdc.net.cn');
-  await expect(links.nth(1)).toContainText('博客');
+  await expect(links.nth(1)).toHaveAccessibleName('sun2ot 的博客 abdc.net.cn');
+  await expect(page.locator('.author-links')).toHaveText('');
+  const backup = page.waitForEvent('download');
+  await page.getByRole('button', { name: '备份我的数据', exact: true }).click();
+  expect((await backup).suggestedFilename()).toBe('folio-resume.json');
   for (const link of await links.all())
     expect(await link.getAttribute('rel')).toContain('noreferrer');
 });
@@ -37,12 +61,12 @@ test('精选项目可添加离线 GitHub 仓库卡片，并随备份和导出离
   await expect(help.getByRole('tooltip')).toContainText('自定义 API 代理');
   await expect(help.getByRole('tooltip')).toContainText('离线仓库快照');
   await editor.getByLabel('允许联网搜索 / 刷新').check();
-  await expect(editor.getByLabel('使用自定义 API 代理')).toBeVisible();
-  await editor.getByLabel('使用自定义 API 代理').check();
+  await expect(editor.getByLabel('使用自定义 API 代理', { exact: true })).toBeVisible();
+  await editor.getByLabel('使用自定义 API 代理', { exact: true }).check();
   await expect(editor.getByLabel('HTTPS 代理根地址')).toBeVisible();
   // 展示给用户的提示必须写明代理只接受根地址。
   await expect(editor.getByText(/只要根地址/)).toBeVisible();
-  await editor.getByLabel('使用自定义 API 代理').uncheck();
+  await editor.getByLabel('使用自定义 API 代理', { exact: true }).uncheck();
   const field = editor.getByRole('textbox', { name: /GitHub 链接/ });
   await field.fill('https://github.com/sun2ot/folio');
   await editor.getByRole('button', { name: '手动填写卡片' }).click();
@@ -62,7 +86,8 @@ test('精选项目可添加离线 GitHub 仓库卡片，并随备份和导出离
   await expect(card).toHaveAttribute('href', 'https://github.com/sun2ot/folio');
   // 卡片随 JSON 备份往返，并写入离线 HTML。
   const backup = page.waitForEvent('download');
-  await page.getByRole('button', { name: /备份我的数据/ }).click();
+  await page.getByRole('button', { name: '导出简历' }).click();
+  await page.getByRole('button', { name: /JSON 数据备份/ }).click();
   const file = testInfo.outputPath('github-card.json');
   await (await backup).saveAs(file);
   const backupDoc = JSON.parse(await readFile(file, 'utf8'));

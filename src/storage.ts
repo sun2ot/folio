@@ -74,14 +74,16 @@ const avatarCache = new Map<string, Promise<string>>();
  * GitHub 头像只在用户主动查询仓库时抓取一次，随后以本地 data URL 存入卡片，
  * 这样预览、备份与所有导出都不需要再联网。
  */
-export function fetchAvatar(url: string): Promise<string> {
+export function fetchAvatar(url: string, signal?: AbortSignal): Promise<string> {
   let cached = avatarCache.get(url);
   if (!cached) {
     cached = (async () => {
       const response = await fetch(url, {
         credentials: 'omit',
         referrerPolicy: 'no-referrer',
-        signal: AbortSignal.timeout(10_000),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(10_000)])
+          : AbortSignal.timeout(10_000),
       });
       if (!response.ok) throw new Error('头像获取失败');
       const blob = await response.blob();

@@ -5,6 +5,7 @@ const name = z
   .string()
   .regex(/^[a-z\d_.-]{1,100}$/i)
   .refine((s) => s !== '.' && s !== '..');
+const ownerId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 /** 卡片只保存本地 PNG/JPEG/WebP 副本，避免远程地址进入简历数据。 */
 const image = z
   .string()
@@ -15,6 +16,7 @@ const image = z
   );
 export const repositorySchema = z.object({
   owner,
+  ownerId: ownerId.optional(),
   name,
   description: z.string().max(1000),
   stars: z.number().int().min(0).max(1_000_000_000).nullable(),
@@ -26,7 +28,7 @@ export const repositorySchema = z.object({
 });
 export type Repository = z.infer<typeof repositorySchema>;
 export const repositoryAPI = z.object({
-  owner: z.object({ login: owner }),
+  owner: z.object({ login: owner, id: ownerId }),
   name,
   description: z.string().max(1000).nullable(),
   stargazers_count: z.number().int().nonnegative(),
@@ -37,6 +39,7 @@ export function toRepository(value: unknown): Repository {
   const data = repositoryAPI.parse(value);
   return repositorySchema.parse({
     owner: data.owner.login,
+    ownerId: data.owner.id,
     name: data.name,
     description: data.description || '',
     stars: data.stargazers_count,
@@ -75,9 +78,9 @@ export function repositoryKey(input: string): string | null {
 export function repositoryURL(repo: Pick<Repository, 'owner' | 'name'>) {
   return `https://github.com/${repo.owner}/${repo.name}`;
 }
-/** GitHub 头像地址由用户名推导，不需要额外 API 请求；抓取失败时界面回退到图标。 */
-export function avatarURL(repo: Pick<Repository, 'owner'>) {
-  return `https://github.com/${repo.owner}.png?size=256`;
+/** 使用 API 校验后的作者 ID，避免用户名重定向与任意远程 URL 进入抓取路径。 */
+export function avatarURL(repo: Pick<Repository, 'ownerId'>) {
+  return `https://avatars.githubusercontent.com/u/${ownerId.parse(repo.ownerId)}?s=256`;
 }
 export function apiBase(proxy: string) {
   if (!proxy) return 'https://api.github.com/';

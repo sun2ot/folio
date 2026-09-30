@@ -42,7 +42,12 @@ test('按模块命名添加操作，日期地点同行，条目之间保留间�
     await page.getByLabel(location, { exact: true }).first().fill('上海');
     const heading = page.locator(`#resume-pages [data-module="${id}"] .entry-heading`).first();
     for (const layout of ['left-right', 'left-center-right']) {
-      await page.getByLabel('经历标题布局').selectOption(layout);
+      await page
+        .getByLabel(
+          `${id === 'experience' ? '工作经历' : id === 'projects' ? '项目' : '教育背景'}标题布局`,
+          { exact: true },
+        )
+        .selectOption(layout);
       await expect(heading).toHaveClass(new RegExp(layout));
       await expect(heading.locator('.entry-meta')).toContainText(' · 上海');
       const size = await heading.evaluate((el) => ({
@@ -162,7 +167,8 @@ test('编辑、保存、模板切换、模块增删和备份', async ({ page }) 
   await page.getByRole('button', { name: '删除此模块' }).click();
   await expect(page.locator('#resume-pages strong mark')).toHaveCount(0);
   const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: '备份我的数据' }).click();
+  await page.getByRole('button', { name: '导出简历' }).click();
+  await page.getByRole('button', { name: /JSON 数据备份/ }).click();
   expect((await download).suggestedFilename()).toBe('folio-resume.json');
 });
 test('手动预览、拖动排序和分页', async ({ page }) => {
@@ -351,7 +357,7 @@ test('多字段图标、长链接与经历左右 / 左中右布局', async ({ pa
   await page.getByLabel('第 1 条教育背景详情').fill('- **主修课程**：软件工程\n  - 数据结构');
   const section = page.locator('#resume-pages [data-module="education"]');
   await expect(section.locator('.entry-main')).toContainText('示例大学 · 硕士');
-  await page.getByLabel('经历标题布局').selectOption('left-center-right');
+  await page.getByLabel('教育背景标题布局').selectOption('left-center-right');
   await expect(section.locator('.entry-main')).toHaveText('示例大学');
   await expect(section.locator('.entry-middle')).toContainText('计算机技术');
   await expect(section.locator('.entry-meta')).toContainText('2023.09 — 2026.06');

@@ -65,6 +65,39 @@ const typography = z.object({
   size: z.number().min(9).max(30),
   color,
 });
+// 省略属性时跟随全局颜色 / 字体；装饰文字的默认字号为 9px。
+const decorationStyleSchema = typography.partial();
+export type DecorationStyle = z.infer<typeof decorationStyleSchema>;
+const dividerSchema = z.object({
+  color: color.optional(),
+  width: z.number().min(0).max(12).optional(),
+});
+export const dividerLabels = {
+  header: '基本信息分割线',
+  section: '模块标题分割线',
+  content: '正文分割线',
+  footer: '页脚分割线',
+  stripe: '顶部色带',
+};
+export type DividerKey = keyof typeof dividerLabels;
+export function defaultDivider(template: Resume['theme']['template'], key: DividerKey) {
+  return {
+    color:
+      key === 'header' || key === 'stripe' || (key === 'section' && template === 'classic')
+        ? '#315b50'
+        : key === 'footer'
+          ? '#e8ece9'
+          : '#dce4df',
+    width:
+      key === 'stripe'
+        ? 8
+        : key === 'header' && template !== 'classic'
+          ? 2
+          : key === 'section' && template === 'compact'
+            ? 0
+            : 1,
+  };
+}
 const identifier = z.string().regex(/^[\w-]{1,80}$/);
 export const placementSchema = z
   .object({
@@ -138,6 +171,7 @@ const infoFieldSchema = z.object({
   label: z.string().min(1).max(60),
   value: short,
   icon: z.enum(icons),
+  color: color.optional(),
 });
 export type InfoField = z.infer<typeof infoFieldSchema>;
 export function createInfoField(preset?: { label: string; icon: IconId }): InfoField {
@@ -146,6 +180,7 @@ export function createInfoField(preset?: { label: string; icon: IconId }): InfoF
     label: preset?.label ?? '新字段',
     value: '',
     icon: preset?.icon ?? 'star',
+    color: '',
   };
 }
 export const moduleSchema = z.object({
@@ -171,6 +206,7 @@ export const documentSchema = z
       name: short,
       nameColor: color,
       role: short,
+      roleColor: color.optional(),
       fields: z.array(infoFieldSchema).max(30),
       columns: z.number().int().min(1).max(3),
       infoWidth: z.number().min(280).max(678),
@@ -191,10 +227,23 @@ export const documentSchema = z
       footerText: z.string().max(100),
       pageNumberVisible: z.boolean(),
       pageNumberFormat: z.string().max(60),
+      headerStyle: decorationStyleSchema.optional(),
+      footerStyle: decorationStyleSchema.optional(),
+      pageNumberStyle: decorationStyleSchema.optional(),
     }),
     theme: z.object({
       template: z.enum(['editorial', 'classic', 'compact']),
       textColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+      titleColor: color.optional(),
+      dividers: z
+        .object({
+          header: dividerSchema.optional(),
+          section: dividerSchema.optional(),
+          content: dividerSchema.optional(),
+          footer: dividerSchema.optional(),
+          stripe: dividerSchema.optional(),
+        })
+        .optional(),
       font: z.enum(fontIds),
       spacing: z.number().min(8).max(28),
     }),
@@ -235,7 +284,7 @@ export const componentRegistry: Record<Module['kind'], { label: string; initial:
     initial: '在这里介绍你的经历，支持 **加粗**、*斜体*、==高亮== 和 `行内代码`。',
   },
   experience: { label: '工作经历', initial: '' },
-  projects: { label: '项目经历', initial: '' },
+  projects: { label: '精选项目', initial: '' },
   education: { label: '教育背景', initial: '' },
 };
 export function createModule(kind: Module['kind'], id: string = crypto.randomUUID()): Module {
@@ -284,11 +333,13 @@ export const sample: Resume = {
     name: '伊云程',
     nameColor: '',
     role: '产品设计师 / Product Designer',
+    roleColor: '',
     fields: infoFieldPresets.map((preset) => ({
       id: preset.key,
       label: preset.key === 'birthDate' ? '生日' : preset.label,
       icon: preset.icon,
       value: sampleInfo[preset.key] ?? '',
+      color: '',
     })),
     columns: 2,
     infoWidth: 530,
@@ -310,7 +361,13 @@ export const sample: Resume = {
     pageNumberVisible: true,
     pageNumberFormat: '{page} / {pages}',
   },
-  theme: { template: 'editorial', textColor: '#25332f', font: 'sans', spacing: 18 },
+  theme: {
+    template: 'editorial',
+    titleColor: '#25332f',
+    textColor: '#25332f',
+    font: 'sans',
+    spacing: 18,
+  },
   modules: [
     section(
       'summary',

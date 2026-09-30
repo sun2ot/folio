@@ -27,6 +27,13 @@ async function prepare() {
   ) {
     throw new Error('内容超出页面，请拆分模块或减小字号后导出');
   }
+  if (
+    Array.from(root.querySelectorAll<HTMLElement>('.resume-footer')).some(
+      (el) => el.offsetHeight > 54,
+    )
+  ) {
+    throw new Error('页脚 / 页码超出底部留白，请缩小字号或缩短内容后导出');
+  }
   return root;
 }
 export function safeFilename(name: string) {

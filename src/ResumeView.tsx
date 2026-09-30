@@ -19,15 +19,48 @@ import {
 } from 'lucide-react';
 import {
   fontFamilies,
+  dividerLabels,
+  defaultDivider,
+  type DividerKey,
   fitPlacement,
   type IconId,
   type Placement,
   type Resume,
   type Module,
+  type DecorationStyle,
 } from './model';
 import { markdown } from './markdown';
 import { repositoryURL } from './repository';
 import { rowsFor, paginate, type Row } from './pagination';
+
+function decorationStyle(style?: DecorationStyle): CSSProperties {
+  return {
+    color: style?.color || undefined,
+    fontFamily: style?.font ? fontFamilies[style.font] : undefined,
+    fontSize: style?.size,
+  };
+}
+
+function Footer({ doc, page, pages }: { doc: Resume; page: number; pages: number }) {
+  const d = doc.pageDecoration;
+  if (!d.footerVisible && !d.pageNumberVisible) return null;
+  return (
+    <footer className="resume-footer">
+      {d.footerVisible && (
+        <span className="resume-footer-text" style={decorationStyle(d.footerStyle)}>
+          {d.footerText}
+        </span>
+      )}
+      {d.pageNumberVisible && (
+        <span className="resume-page-number" style={decorationStyle(d.pageNumberStyle)}>
+          {d.pageNumberFormat
+            .replaceAll('{page}', String(page))
+            .replaceAll('{pages}', String(pages))}
+        </span>
+      )}
+    </footer>
+  );
+}
 
 const iconMap: Record<IconId, typeof UserRound | null> = {
   none: null,
@@ -89,10 +122,14 @@ const Profile = memo(function Profile({ doc }: { doc: Resume }) {
     <header className="resume-header">
       <div className="resume-identity" style={{ width: p.infoWidth }}>
         {doc.pageDecoration.headerVisible && (
-          <div className="resume-eyebrow">{doc.pageDecoration.headerText}</div>
+          <div className="resume-eyebrow" style={decorationStyle(doc.pageDecoration.headerStyle)}>
+            {doc.pageDecoration.headerText}
+          </div>
         )}
         <h1 style={p.nameColor ? { color: p.nameColor } : undefined}>{p.name || '你的姓名'}</h1>
-        <p className="resume-role">{p.role}</p>
+        <p className="resume-role" style={{ color: p.roleColor || undefined }}>
+          {p.role}
+        </p>
         <div
           className="resume-contact"
           style={{ gridTemplateColumns: `repeat(${p.columns}, minmax(0, 1fr))` }}
@@ -100,7 +137,11 @@ const Profile = memo(function Profile({ doc }: { doc: Resume }) {
           {p.fields
             .filter((field) => field.value)
             .map((field) => (
-              <div className="resume-contact-item" key={field.id}>
+              <div
+                className="resume-contact-item"
+                key={field.id}
+                style={{ color: field.color || undefined }}
+              >
                 <SectionIcon name={field.icon} size={13} />
                 <span>
                   {field.label}：{field.value}
@@ -380,13 +421,22 @@ export function ResumeView({
       if (!root || !live) return;
       const families = new Set([
         doc.theme.font,
+        ...(doc.pageDecoration.headerVisible && doc.pageDecoration.headerStyle?.font
+          ? [doc.pageDecoration.headerStyle.font]
+          : []),
+        ...(doc.pageDecoration.footerVisible && doc.pageDecoration.footerStyle?.font
+          ? [doc.pageDecoration.footerStyle.font]
+          : []),
+        ...(doc.pageDecoration.pageNumberVisible && doc.pageDecoration.pageNumberStyle?.font
+          ? [doc.pageDecoration.pageNumberStyle.font]
+          : []),
         ...doc.modules
           .filter((m) => m.visible)
           .flatMap((m) => [m.titleStyle.font, m.bodyStyle.font]),
       ]);
       await Promise.all(
         [...families].map((font) =>
-          document.fonts.load(`12px ${fontFamilies[font]}`, root.textContent || ' '),
+          document.fonts.load(`12px ${fontFamilies[font]}`, root.parentElement!.textContent || ' '),
         ),
       );
       await document.fonts.ready;
@@ -408,6 +458,14 @@ export function ResumeView({
         doc.media.qr.image && doc.media.qr.visible ? doc.media.qr.page : 1,
       );
       while (result.pages.length < mediaPage) result.pages.push([]);
+      // 页脚独立于正文流，按实际页数测量，避免增大字号后覆盖正文。
+      const footer = root.parentElement!.querySelector<HTMLElement>('.resume-footer');
+      const number = footer?.querySelector('.resume-page-number');
+      if (number)
+        number.textContent = doc.pageDecoration.pageNumberFormat
+          .replaceAll('{page}', String(result.pages.length))
+          .replaceAll('{pages}', String(result.pages.length));
+      if (footer && footer.offsetHeight > 54) result.oversized.push('页脚 / 页码');
       setPages(result.pages);
       setReady(true);
       onReady(result.pages.length, result.oversized);
@@ -421,9 +479,18 @@ export function ResumeView({
   }, [doc, onReady]);
   const style = {
     '--text-color': doc.theme.textColor,
+    '--title-color': doc.theme.titleColor || doc.theme.textColor,
     '--section-gap': `${doc.theme.spacing}px`,
     fontFamily: fontFamilies[doc.theme.font],
   } as CSSProperties;
+  for (const key of Object.keys(dividerLabels) as DividerKey[]) {
+    const preset = defaultDivider(doc.theme.template, key);
+    const divider = doc.theme.dividers?.[key];
+    Object.assign(style, {
+      [`--${key}-line-color`]: divider?.color || preset.color,
+      [`--${key}-line-width`]: `${divider?.width ?? preset.width}px`,
+    });
+  }
   return (
     <div
       className={`resume-document template-${doc.theme.template}`}
@@ -444,6 +511,7 @@ export function ResumeView({
         </div>
         {doc.profile.photo && <img src={doc.profile.photo} alt="" />}
         {doc.media.qr.image && <img src={doc.media.qr.image} alt="" />}
+        <Footer doc={doc} page={pages.length} pages={pages.length} />
       </div>
       <div
         id="resume-pages"
@@ -485,18 +553,7 @@ export function ResumeView({
                   />
                 ),
             )}
-            {(doc.pageDecoration.footerVisible || doc.pageDecoration.pageNumberVisible) && (
-              <footer className="resume-footer">
-                <span>{doc.pageDecoration.footerVisible ? doc.pageDecoration.footerText : ''}</span>
-                {doc.pageDecoration.pageNumberVisible && (
-                  <span>
-                    {doc.pageDecoration.pageNumberFormat
-                      .replaceAll('{page}', String(i + 1))
-                      .replaceAll('{pages}', String(pages.length))}
-                  </span>
-                )}
-              </footer>
-            )}
+            <Footer doc={doc} page={i + 1} pages={pages.length} />
           </article>
         ))}
       </div>

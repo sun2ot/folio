@@ -9,9 +9,9 @@ import {
   Plus,
   Upload,
   ImagePlus,
+  RotateCcw,
 } from 'lucide-react';
 import {
-  componentRegistry,
   fonts,
   infoFieldPresets,
   createInfoField,
@@ -100,7 +100,7 @@ function MarkdownEditor({
         />
         <div className="editor-counter">{value.length.toLocaleString()} / 30,000</div>
       </div>
-      <p className="hint">支持 **加粗**、==高亮== 和多层列表；列表内 Tab 缩进，Shift+Tab 离开。</p>
+      <p className="hint">列表内 Tab 缩进，Shift+Tab 离开。</p>
     </div>
   );
 }
@@ -121,10 +121,7 @@ export function MediaEditor({
     <div className="editor-fields">
       <div className="panel-intro">
         <h2>图片自由布局</h2>
-        <p>
-          Shift + 拖动锁定水平或垂直方向。方向键移动 1 px，Shift + 方向键移动 10
-          px。也可填写页码和坐标。
-        </p>
+        <p>方向键移动，Shift 加速；Shift + 拖动锁定方向。</p>
       </div>
       <div className="qr-upload">
         {doc.media.qr.image && <img src={doc.media.qr.image} alt="已上传的二维码" />}
@@ -154,10 +151,7 @@ export function MediaEditor({
             }
           }}
         />
-        <p className="hint">
-          二维码完整保留白边。头像上传与圆形 /
-          方形取景位于「基本信息」。浮动图片不占正文流，请为图片留白。
-        </p>
+        <p className="hint">头像在「基本信息」上传。浮动图片不占正文流，请留白。</p>
       </div>
       <label className="field">
         <span>二维码替代文本</span>
@@ -213,9 +207,7 @@ export function MediaEditor({
           </fieldset>
         );
       })}
-      <p className="hint">
-        坐标相对于 A4 左上角。指定尚不存在的页会新增空白页；图片位置随模板、备份和导出保留。
-      </p>
+      <p className="hint">坐标从 A4 左上角计算；指定新页码会增加空白页。</p>
     </div>
   );
 }
@@ -245,30 +237,49 @@ export function ColorField({
   value,
   onChange,
   fallback,
+  inherit = true,
+  compact = false,
+  presets,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  fallback?: string;
+  fallback: string;
+  inherit?: boolean;
+  compact?: boolean;
+  presets?: readonly { color: string; name: string }[];
 }) {
   return (
-    <div className="field">
-      <span>{label}</span>
-      <div className="color-field">
+    <div className={compact ? 'compact-color' : 'field'}>
+      {!compact && <span>{label}</span>}
+      <div className={`color-field${compact ? ' compact' : ''}`}>
+        {presets?.map(({ color, name }) => (
+          <button
+            key={color}
+            className="color-preset"
+            style={{ backgroundColor: color }}
+            aria-label={`${label}预设 ${name}`}
+            aria-pressed={(value || fallback).toLowerCase() === color.toLowerCase()}
+            title={name}
+            onClick={() => onChange(color)}
+          />
+        ))}
         <input
           type="color"
           aria-label={`${label}取色`}
-          value={value || fallback || '#000000'}
+          value={value || fallback}
+          title={value || fallback}
           onChange={(e) => onChange(e.target.value)}
         />
-        <span className="color-value">{value || '跟随全局'}</span>
-        {value && (
+        {inherit && (
           <button
-            className="text-button"
+            className="color-reset"
             aria-label={`${label}恢复跟随全局`}
+            title="跟随全局"
+            disabled={!value}
             onClick={() => onChange('')}
           >
-            跟随全局
+            {compact ? <RotateCcw size={14} aria-hidden="true" /> : '跟随全局'}
           </button>
         )}
       </div>
@@ -277,10 +288,12 @@ export function ColorField({
 }
 export function ProfileEditor({
   profile,
+  theme,
   onChange,
   notify,
 }: {
   profile: Resume['profile'];
+  theme: Resume['theme'];
   onChange: (p: Resume['profile']) => void;
   notify: (s: string) => void;
 }) {
@@ -301,9 +314,7 @@ export function ProfileEditor({
   return (
     <div className="editor-fields">
       <div className="panel-intro">
-        <span className="eyebrow">THE FIRST IMPRESSION</span>
         <h2>基本信息</h2>
-        <p>让下一次机会，从认识你开始。</p>
       </div>
       <div className="photo-editor">
         <div
@@ -413,10 +424,9 @@ export function ProfileEditor({
               onChange={(e) => patch({ y: +e.target.value })}
             />
           </label>
-          <p className="hint">拖动头像或使用滑块调整取景。</p>
         </div>
       )}
-      <div className="field-row">
+      <div className="profile-text-row">
         <label className="field">
           <span>姓名</span>
           <input
@@ -429,18 +439,27 @@ export function ProfileEditor({
         <ColorField
           label="姓名颜色"
           value={profile.nameColor}
+          fallback={theme.titleColor || theme.textColor}
           onChange={(nameColor) => patch({ nameColor })}
         />{' '}
       </div>
-      <label className="field">
-        <span>求职意向</span>
-        <input
-          maxLength={200}
-          value={profile.role}
-          placeholder="职位 / 职业方向"
-          onChange={(e) => patch({ role: e.target.value })}
+      <div className="profile-text-row">
+        <label className="field">
+          <span>求职意向</span>
+          <input
+            maxLength={200}
+            value={profile.role}
+            placeholder="职位 / 职业方向"
+            onChange={(e) => patch({ role: e.target.value })}
+          />
+        </label>
+        <ColorField
+          label="求职意向颜色"
+          value={profile.roleColor || ''}
+          fallback={theme.textColor}
+          onChange={(roleColor) => patch({ roleColor })}
         />
-      </label>
+      </div>
       <div className="info-fields">
         <div className="label-line">
           <span>信息字段</span>
@@ -488,6 +507,12 @@ export function ProfileEditor({
                   onChange={(e) => change({ value: e.target.value })}
                 />
               </label>
+              <ColorField
+                label={`第 ${i + 1} 项颜色`}
+                value={field.color || ''}
+                fallback={theme.textColor}
+                onChange={(color) => change({ color })}
+              />
               <div className="entry-actions">
                 <button
                   className="small-button"
@@ -568,13 +593,19 @@ export function ProfileEditor({
           onChange={(e) => patch({ infoWidth: +e.target.value })}
         />
       </label>
-      <p className="hint">
-        预设字段可改名、换图标、删除或插入；留空的信息不会出现在简历上。缩窄信息区域可为浮动图片留白。
-      </p>
+      <p className="hint">留空字段不显示；缩窄信息区域可为图片留白。</p>
     </div>
   );
 }
-export function ModuleEditor({ item, onChange }: { item: Module; onChange: (m: Module) => void }) {
+export function ModuleEditor({
+  item,
+  theme,
+  onChange,
+}: {
+  item: Module;
+  theme: Resume['theme'];
+  onChange: (m: Module) => void;
+}) {
   const patch = (p: Partial<Module>) => onChange({ ...item, ...p });
   const entryName = { text: '', experience: '工作经历', projects: '项目', education: '教育背景' }[
     item.kind
@@ -583,9 +614,7 @@ export function ModuleEditor({ item, onChange }: { item: Module; onChange: (m: M
   return (
     <div className="editor-fields">
       <div className="panel-intro">
-        <span className="eyebrow">TELL YOUR STORY</span>
         <h2>{item.title || '未命名模块'}</h2>
-        <p>{componentRegistry[item.kind].label} · 所有修改自动保存</p>
       </div>
       <label className="field">
         <span>模块标题</span>
@@ -616,13 +645,14 @@ export function ModuleEditor({ item, onChange }: { item: Module; onChange: (m: M
       ) : (
         <>
           <label className="field">
-            <span>经历标题布局</span>
+            <span>{entryName}标题布局</span>
             <select
+              aria-label={`${entryName}标题布局`}
               value={item.entryLayout}
               onChange={(e) => patch({ entryLayout: e.target.value as Module['entryLayout'] })}
             >
-              <option value="left-right">左右：单位与角色 / 时间地点</option>
-              <option value="left-center-right">左中右：单位 / 角色或学历 / 时间地点</option>
+              <option value="left-right">左右布局</option>
+              <option value="left-center-right">左中右布局</option>
             </select>
           </label>
           {item.entries.map((entry, i) => {
@@ -729,23 +759,28 @@ export function ModuleEditor({ item, onChange }: { item: Module; onChange: (m: M
                 value={item[key].font}
                 onChange={(font) => patch({ [key]: { ...item[key], font } })}
               />
-              <select
-                aria-label={`${i === 0 ? '标题' : '正文'}字号`}
-                value={item[key].size}
-                onChange={(e) => patch({ [key]: { ...item[key], size: +e.target.value } })}
-              >
-                {Array.from({ length: 22 }, (_, j) => j + 9).map((n) => (
-                  <option value={n} key={n}>
-                    {n} px
-                  </option>
-                ))}
-              </select>
+              <div className="font-size-select">
+                <select
+                  aria-label={`${i === 0 ? '标题' : '正文'}字号`}
+                  value={item[key].size}
+                  onChange={(e) => patch({ [key]: { ...item[key], size: +e.target.value } })}
+                >
+                  {Array.from({ length: 22 }, (_, j) => j + 9).map((n) => (
+                    <option value={n} key={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                <span aria-hidden="true">px</span>
+              </div>
+              <ColorField
+                compact
+                label={`${i === 0 ? '标题' : '正文'}颜色`}
+                value={item[key].color}
+                fallback={i === 0 ? theme.titleColor || theme.textColor : theme.textColor}
+                onChange={(color) => patch({ [key]: { ...item[key], color } })}
+              />
             </div>
-            <ColorField
-              label={`${i === 0 ? '标题' : '正文'}颜色`}
-              value={item[key].color}
-              onChange={(color) => patch({ [key]: { ...item[key], color } })}
-            />
           </div>
         ))}
         <label className="check-field">

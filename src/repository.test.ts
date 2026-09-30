@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { intersectsRange, neededFontFaces } from './fonts';
 import {
   apiBase,
+  avatarURL,
   repositoryKey,
   repositorySchema,
   requestRepositories,
@@ -27,7 +28,7 @@ describe('GitHub 仓库标识与卡片数据', () => {
   });
   it('把 API 响应收敛成卡片字段并拒绝异常结构', () => {
     const repository = toRepository({
-      owner: { login: 'sun2ot' },
+      owner: { login: 'sun2ot', id: 12345 },
       name: 'folio',
       description: null,
       stargazers_count: 12,
@@ -38,6 +39,10 @@ describe('GitHub 仓库标识与卡片数据', () => {
     expect(repository.stars).toBe(12);
     expect(repository.language).toBe('');
     expect(repository.fetchedAt).toEqual(expect.any(String));
+    expect(avatarURL(repository)).toBe('https://avatars.githubusercontent.com/u/12345?s=256');
+    expect(() => avatarURL({ ownerId: -1 })).toThrow();
+    expect(() => avatarURL({})).toThrow();
+    expect(repositorySchema.safeParse({ ...repository, ownerId: '123/evil' }).success).toBe(false);
     expect(repositorySchema.safeParse({ ...repository, stars: -1 }).success).toBe(false);
     expect(repositorySchema.safeParse({ ...repository, owner: 'bad owner' }).success).toBe(false);
     expect(() => toRepository({ name: 'folio' })).toThrow();
@@ -66,7 +71,7 @@ describe('GitHub 仓库标识与卡片数据', () => {
   });
   it('联网请求使用仓库路径，并在受限或输入非法时给出可操作提示', async () => {
     const payload = {
-      owner: { login: 'sun2ot' },
+      owner: { login: 'sun2ot', id: 12345 },
       name: 'folio',
       description: null,
       stargazers_count: 3,

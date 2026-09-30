@@ -1,6 +1,6 @@
 /* Shared by live preview, self-contained HTML, PDF capture and print. Keep physical geometry stable. */
 .resume-document {
-  /* 全局文字色：模块未单独设色时继承这里，即「样式 → 主题色」。 */
+  /* 标题与正文分别继承全局设置，所有导出复用这条继承链。 */
   color: var(--text-color, #25332f);
   font-size: 12px;
   line-height: 1.65;
@@ -32,7 +32,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 2px solid var(--accent);
+  border-bottom: var(--header-line-width, 2px) solid var(--header-line-color, var(--accent));
   padding-bottom: 22px;
   gap: 24px;
 }
@@ -42,10 +42,10 @@
 }
 .resume-eyebrow {
   overflow-wrap: anywhere;
-  font-family: Inter, sans-serif;
+  font-family: inherit;
   font-size: 9px;
   letter-spacing: 3px;
-  color: var(--accent);
+  color: inherit;
   margin-bottom: 10px;
   font-weight: 600;
 }
@@ -54,7 +54,7 @@
   letter-spacing: 4px;
   line-height: 1.3;
   margin: 0 0 8px;
-  color: inherit;
+  color: var(--title-color, var(--text-color));
   overflow-wrap: anywhere;
 }
 .resume-role {
@@ -82,7 +82,7 @@
 }
 .resume-contact-item svg {
   flex-shrink: 0;
-  color: var(--accent);
+  color: inherit;
   position: relative;
   top: 2px;
 }
@@ -111,10 +111,10 @@
 .repository-title svg {
   flex-shrink: 0;
   align-self: center;
-  color: var(--accent);
+  color: inherit;
 }
 .repository-title strong {
-  color: var(--accent);
+  color: inherit;
 }
 .repository-title span {
   opacity: 0.72;
@@ -253,8 +253,8 @@
   line-height: 1.5;
   letter-spacing: 1px;
   font-weight: 700;
-  color: inherit;
-  border-bottom: 1px solid #dce4df;
+  color: var(--title-color, var(--text-color));
+  border-bottom: var(--section-line-width, 1px) solid var(--section-line-color, #dce4df);
   padding: 0 0 7px;
   margin: 0 0 9px;
 }
@@ -328,7 +328,7 @@
 }
 .markdown hr {
   border: 0;
-  border-top: 1px solid #dce4df;
+  border-top: var(--content-line-width, 1px) solid var(--content-line-color, #dce4df);
   margin: 12px 0;
 }
 .resume-qr {
@@ -348,27 +348,32 @@
   justify-content: space-between;
   gap: 20px;
   font-size: 9px;
-  color: #9ba49f;
+  color: inherit;
   line-height: 1.4;
-  border-top: 1px solid #e8ece9;
+  border-top: var(--footer-line-width, 1px) solid var(--footer-line-color, #e8ece9);
   padding-top: 9px;
 }
-.resume-footer span:first-child {
+.resume-footer-text {
   min-width: 0;
   overflow-wrap: anywhere;
   max-width: 65%;
 }
-.resume-footer span:last-child {
+.resume-page-number {
+  min-width: 0;
+  margin-left: auto;
+  max-width: 65%;
   overflow-wrap: anywhere;
   text-align: right;
+}
+.resume-footer > span:only-child {
+  max-width: 100%;
 }
 .template-classic .resume-header {
   text-align: center;
   justify-content: center;
-  border-bottom: 1px solid var(--accent);
 }
 .template-classic .resume-section h2 {
-  border-bottom: 1px solid var(--accent);
+  border-color: var(--section-line-color, var(--accent));
 }
 .template-compact .resume-page::before {
   content: '';
@@ -376,13 +381,13 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 8px;
-  background: var(--accent);
+  height: var(--stripe-line-width, 8px);
+  background: var(--stripe-line-color, var(--accent));
 }
 .template-compact .resume-section h2 {
   background: #f0f3f1;
   padding: 5px 8px;
-  border: 0;
+  border-bottom: var(--section-line-width, 0px) solid var(--section-line-color, #dce4df);
 }
 .resume-measure {
   position: fixed;

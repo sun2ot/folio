@@ -25,6 +25,7 @@ export function RepositoryEditor({
     [useProxy, setUseProxy] = useState(false),
     [proxy, setProxy] = useState('');
   const [results, setResults] = useState<Repository[]>([]),
+    [resultsOnline, setResultsOnline] = useState(false),
     [message, setMessage] = useState(''),
     [pending, setPending] = useState(false);
   const active = useRef<AbortController | null>(null);
@@ -37,18 +38,45 @@ export function RepositoryEditor({
     setMessage('');
   }
   /** 头像只抓取一次并转成 data URL，之后卡片、备份与导出都离线可用。 */
-  async function save(snapshot: Repository, note: string) {
-    setResults([]);
+  async function save(snapshot: Repository, note: string, retrieveAvatar = false) {
+    cancel();
+    // 离线快照与手动填写立即保存；头像抓取只由显式联网操作触发。
+    if (!retrieveAvatar || !online) {
+      onChange({ visible: true, snapshot });
+      setMessage(note);
+      return;
+    }
+    const request = new AbortController();
+    active.current = request;
+    setPending(true);
     setMessage('正在保存卡片…');
     try {
+      if (!snapshot.ownerId) {
+        const [repository] = await requestRepositories(
+          `${snapshot.owner}/${snapshot.name}`,
+          useProxy ? proxy : '',
+          AbortSignal.any([request.signal, AbortSignal.timeout(12000)]),
+        );
+        if (request.signal.aborted) return;
+        snapshot = { ...snapshot, ownerId: repository.ownerId };
+      }
+      const avatar = await fetchAvatar(avatarURL(snapshot), request.signal);
+      if (request.signal.aborted) return;
       onChange({
         visible: true,
-        snapshot: { ...snapshot, avatar: await fetchAvatar(avatarURL(snapshot)) },
+        snapshot: { ...snapshot, avatar },
       });
       setMessage(note);
     } catch {
-      onChange({ visible: true, snapshot: { ...snapshot, avatar: '' } });
-      setMessage(`${note}（作者头像未取到，已回退为图标）`);
+      if (!request.signal.aborted) {
+        onChange({ visible: true, snapshot });
+        setMessage(`${note}（头像获取失败，保留原头像或图标）`);
+      }
+    } finally {
+      if (active.current === request) {
+        active.current = null;
+        setPending(false);
+      }
     }
   }
   async function search(local: boolean) {
@@ -70,6 +98,7 @@ export function RepositoryEditor({
           );
       if (request.signal.aborted) return;
       setResults(rows);
+      setResultsOnline(!local);
       setMessage(
         rows.length ? '选择仓库后保存为离线卡片。' : '没有匹配仓库，可手动填写或开启联网搜索。',
       );
@@ -88,7 +117,7 @@ export function RepositoryEditor({
     }
   }
   const help =
-    '联网搜索 / 刷新必须能访问 GitHub API，只发送仓库标识或搜索关键词，不会上传简历内容。加速方式：① 用下方“自定义 API 代理”填写可信的 GitHub 镜像或反向代理根地址；② 直接点“读取离线仓库快照”，使用构建时预取的公开仓库；③ 手动填写名称、简介和 Star。卡片一旦保存就变为离线数据，预览、备份和导出都不再联网，Star 只是快照值。';
+    '联网操作必须能访问 GitHub API。可使用自定义 API 代理、离线仓库快照或手动填写。联网时会获取作者头像，保存后预览与导出离线可用。';
   return (
     <details className="repository-editor" open={value.visible || undefined}>
       <summary>
@@ -163,8 +192,7 @@ export function RepositoryEditor({
                     }}
                   />
                   <span className="hint">
-                    用于国内网络加速，需兼容 GitHub REST API 并允许跨域；只要根地址，不要带 token
-                    或查询参数。仅使用你信任的代理，它会收到仓库标识和关键词。本设置不会进入简历备份。
+                    只要根地址，需支持 GitHub API 和跨域；不要带凭据或查询参数。
                   </span>
                 </label>
               )}
@@ -183,6 +211,7 @@ export function RepositoryEditor({
             </button>
             <button
               className="small-button"
+              disabled={pending}
               onClick={() => {
                 cancel();
                 const key = repositoryKey(query);
@@ -216,8 +245,9 @@ export function RepositoryEditor({
             {results.map((repo) => (
               <button
                 className="repository-result"
+                disabled={pending}
                 key={repositoryURL(repo)}
-                onClick={() => void save(repo, '仓库卡片已保存，可离线预览和导出。')}
+                onClick={() => void save(repo, '仓库卡片已保存。', resultsOnline)}
               >
                 <strong>
                   {repo.owner}/{repo.name}
@@ -228,7 +258,7 @@ export function RepositoryEditor({
             ))}
           </div>
           {value.snapshot && (
-            <>
+            <fieldset className="repository-fields" disabled={pending}>
               <p className="hint repository-summary">
                 {value.snapshot.avatar ? (
                   <img className="repository-avatar" src={value.snapshot.avatar} alt="" />
@@ -240,6 +270,13 @@ export function RepositoryEditor({
                   ? `快照：${value.snapshot.fetchedAt.slice(0, 10)}`
                   : '手动填写'}
               </p>
+              <button
+                className="small-button"
+                disabled={!online || pending || (useProxy && !proxy)}
+                onClick={() => void save(value.snapshot!, '作者头像已更新。', true)}
+              >
+                获取作者头像
+              </button>
               <label className="field">
                 <span>仓库简介</span>
                 <textarea
@@ -295,7 +332,7 @@ export function RepositoryEditor({
               >
                 清除仓库卡片
               </button>
-            </>
+            </fieldset>
           )}
         </>
       )}

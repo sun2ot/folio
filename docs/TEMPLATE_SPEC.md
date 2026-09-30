@@ -12,16 +12,18 @@
 | profile        | 姓名与颜色、可编辑信息字段、头像数据与网格   |
 | media          | 头像与二维码的自由定位、二维码图片与替代文本 |
 | pageDecoration | 页眉、页脚标识、页码内容及各自开关           |
-| theme          | 模板、全局文字色、全局字体、模块间距         |
+| theme          | 模板、全局标题色与正文色、全局字体、模块间距 |
 | modules        | 按阅读顺序排列的文本或结构化经历模块         |
 
 ## 个人信息
 
-姓名 name 与求职意向 role 独立显示，nameColor 可单独设色（空字符串表示跟随 theme.textColor）。
+姓名 name 与求职意向 role 独立显示，nameColor 可单独设色（空字符串表示跟随全局标题色）；roleColor 可单独设色（省略或空字符串表示跟随 theme.textColor）。
 
 信息字段是**可编辑列表** `profile.fields`，每项为 `{ id, label, value, icon }`：id 为 1–80 位稳定标识，label 1–60 字，value 最多 200 字，icon 取图标集。`infoFieldPresets` 只提供初始预设（联系电话、电子邮箱、性别、GitHub、个人网站、民族、出生日期、政治面貌、籍贯、户籍、所在城市、工作年限），不参与校验：用户可改名（示例把「出生日期」改成「生日」）、换图标、删除、上下移动，或用 `createInfoField()` 插入预设字段或空白字段。schema 校验字段 ID 唯一、label 非空、value 长度与 icon 合法；最多 30 项。value 为空时该项不渲染。
 
 columns 为 1–3 列；infoWidth 为 280–678 CSS px。网格列使用 minmax(0, 1fr)，图标不缩小，长字段自然换行。缩窄信息区域可为自由定位图片留白。姓名与意向也支持换行。
+
+每项信息字段另外支持可选的 `color`，同时作用于字段名称、内容和图标；省略或空字符串表示跟随全局正文色。颜色与稳定 ID 一起保存，改名和排序不会丢失。
 
 photo 是空字符串或 PNG/JPEG/WebP base64 data URL。shape 为 square/circle；x/y 为 0–100 的取景百分比，zoom 为 1–3。取景与纸张上的图片位置是两套独立状态。
 
@@ -31,12 +33,28 @@ photo 是空字符串或 PNG/JPEG/WebP base64 data URL。shape 为 square/circle
 
 默认墨色只在 CSS 中作为兜底，实际颜色沿继承链生效：
 
-1. `theme.textColor` 由「样式 → 主题色」设置，通过内联 `--text-color` 变量作用于整个 `.resume-document`；
-2. `module.titleStyle.color` 覆盖模块标题（含标题图标，图标用同一颜色）；
-3. `module.bodyStyle.color` 覆盖模块正文容器 `.resume-body`；
-4. `profile.nameColor` 覆盖简历上的姓名。
+1. `theme.textColor` 由「样式 → 全局正文颜色」设置，通过内联 `--text-color` 作用于正文、求职意向与信息字段；
+2. 可选的 `theme.titleColor` 由「样式 → 全局标题颜色」设置，通过 `--title-color` 作用于姓名与模块标题；省略或空串时取 `theme.textColor`，编辑全局正文色时保留原来的标题色；
+3. `module.titleStyle.color` 覆盖模块标题（含标题图标），`module.bodyStyle.color` 覆盖模块正文；
+4. `profile.nameColor`、可选的 `profile.roleColor` 和 `profile.fields[].color` 分别覆盖姓名、求职意向和每条信息字段。
 
-四个颜色都允许空字符串，表示继承上一级。编辑器里的 ColorField 提供取色器与「跟随全局」按钮，把颜色清回空串。修改格式后必须确认行高、分页与导出未变：颜色不影响几何尺寸。
+局部颜色允许空字符串，表示继承对应全局色；全局正文色必须是六位十六进制颜色。新增字段为 v4 可选扩展，不改变存储键或已有内容；省略字段直接使用上述继承链，无版本迁移。所有颜色仍经 schema 校验。
+
+编辑器里的 ColorField 使用固定大小的圆形取色按钮，显示实际生效颜色，不在旁边展示颜色代码。「跟随全局」始终显示，继承时禁用并置灰，恢复继承清回空串。修改后必须确认行高、分页与导出未变：颜色不影响几何尺寸。
+
+全局标题色预设为顺圣、拓黄、苍黄、官绿、青雘、蓝采和、凝夜紫；全局正文色预设为黑色、帝释青、瑾瑜、京元、青骊、螺子黛、油紫。每项保存色值及名称，悬停与可访问名称显示传统色名称。模块字体、字号、颜色同排，恢复继承使用带可访问名称和悬停提示的重置图标。仓库名称和回退 GitHub 图标继承所在模块正文颜色，模块未覆盖时使用全局正文色。
+
+## 页眉、页脚与页码
+
+`pageDecoration` 保留各自的内容、格式与可见开关，新增可选的 `headerStyle`、`footerStyle`、`pageNumberStyle`，均为 `{ color?, font?, size? }`。省略 / 空串颜色继承 `theme.textColor`，省略字体继承 `theme.font`；字号范围 9–30 CSS px，省略时为 9px。重置清空样式，单独恢复颜色不会改变字体与字号。此为 v4 可选扩展，已有文档不迁移，保存、备份、模板切换与所有导出保留覆盖。
+
+页眉参与基本信息高度测量；页脚和页码独立排版，字体加载与测量覆盖各自文本。底部留白为 74px，页脚距底部 20px，高度超过剩余 54px 时提示并阻止排版导出，JSON 备份不受影响。预览、HTML、PDF 与打印共用文字样式与边界检查。
+
+## 分割线
+
+`theme.dividers` 为可选的 v4 扩展，包含可选的 `header`（基本信息）、`section`（模块标题）、`content`（Markdown 横线）、`footer`（页脚）和 `stripe`（构筑顶部色带）。每项为 `{ color?, width? }`，颜色省略 / 空串、粗细省略时使用当前模板默认值；粗细为 0–12 CSS px，0 隐藏。
+
+青序的基本信息线默认为 2px，书简为 1px；模块标题线默认 1px，构筑默认 0px；正文与页脚线默认 1px，构筑顶部色带默认 8px。颜色与模板默认样式保持一致。设置从统一 CSS 变量进入隐藏测量、预览、HTML、PDF 与打印。切换模板保留用户覆盖，重置移除该项覆盖；修改粗细后重新分页，不能沿用旧测量结果。
 
 ## 浮动图片
 
@@ -56,7 +74,7 @@ photo 是空字符串或 PNG/JPEG/WebP base64 data URL。shape 为 square/circle
 - field：跨模板唯一语义键，允许点号。内置 summary / experience / projects / education / skills；新增组件使用 custom.<uuid>。
 - kind：仅 text / experience / projects / education。列表由 Markdown 支持，不再提供列表或二维码章节组件。
 - title / icon：标题与本地 Lucide 图标。图标集同时供模块标题与基本信息字段使用，ID 为 none / user / briefcase / graduation / code / award / link / star / phone / mail / globe / github / calendar / flag / contact / clock / map。
-- titleStyle / bodyStyle：font（sans/serif/inter/source）、size（9–30 px）、color（空串继承 theme.textColor）。
+- titleStyle / bodyStyle：font（sans/serif/inter/source）、size（9–30 px）、color（空串分别继承全局标题色 / theme.textColor）。
 - width：full 或 half；两个相邻 half 组成一行。visible 决定是否排版，pageBreak 在模块前换页。
 - body：仅 text 使用，最多 30,000 字；text 的 entries 必须为空。
 - entries：经历组件使用，最多 30 条；经历组件的模块 body 必须为空。
@@ -80,12 +98,14 @@ photo 是空字符串或 PNG/JPEG/WebP base64 data URL。shape 为 square/circle
 
 项目经历条目可附带一张仓库卡片：`entry.github = { visible, snapshot }`，snapshot 为 `repositorySchema` 或 null，字段为 owner、name、description、stars、forks、language、avatar、fetchedAt。owner/name 使用 GitHub 命名规则正则校验，stars/forks 允许 null（留空则不显示），description 最多 1000 字，language 最多 100 字。
 
-avatar 是作者头像的本地副本：查询成功后由 `avatarURL()` 推导 `https://github.com/<owner>.png?size=256`，`fetchAvatar()` 抓取并缩放为 256 px 的 PNG data URL（最多 600 KB）写入卡片；抓取失败时留空，界面回退为 GitHub 图标。简历上只渲染卡片内的头像或图标，绝不使用远程地址，也不显示快照日期等元信息——`fetchedAt` 只出现在编辑器里。
+avatar 是作者头像的本地副本：`repositoryAPI` 校验 `owner.id` 为正的安全整数，收敛为快照里的可选 `ownerId`。联网选择仓库或显式点击「获取作者头像」时，`avatarURL()` 生成 `https://avatars.githubusercontent.com/u/<ownerId>?s=256`，`fetchAvatar()` 抓取并缩放为 256 px 的 PNG data URL（最多 600 KB）。缺少 ownerId 时，仅在显式联网操作中先请求仓库元数据；失败保留原头像或回退图标。关闭联网、修改查询或隐藏卡片会取消未完成操作，防止旧响应覆盖当前卡片。
+
+卡片为项目自有 React 实现，参考 GitHub 官方 REST 响应和社区 github-cards 的卡片用法，不使用在线 iframe。简历上只渲染本地头像或图标，绝不保存远程头像 URL，也不显示 fetchedAt 等编辑器元信息。
 
 数据来源有三条，互不依赖：
 
 1. **离线快照**：`scripts/snapshot-github.ts` 读取仓库根的 `github-repos.json`（公开仓库标识数组），构建前预取并写入 `public/github-repos.json`；应用通过 `bundledRepositories()` 读取，按仓库名与简介做本地过滤。CI 在主分支推送时先执行 `pnpm snapshot:github`，因此发布产物自带快照。
-2. **手动填写**：只填 owner/name，简介、Star、语言完全由用户输入，`fetchedAt` 为 null；头像仍会尝试抓取一次。
+2. **手动填写**：只填 owner/name，简介、Star、语言完全由用户输入，`fetchedAt` 为 null；不自动联网，需要头像时显式打开联网开关并点击「获取作者头像」。
 3. **联网读取**：显式打开开关后调用 GitHub REST API，可按关键词搜索（最多 5 条）。需要外网；可切换到用户自填的 HTTPS 代理根地址以加速。代理地址不得带凭据、查询或片段。
 
 卡片一旦保存即为普通文档数据：预览、打印、PDF、HTML 与 JSON 备份都不再联网，Star 与头像都是写入时的快照值。API 响应经 `repositoryAPI` 校验后才转换，超过 500 KB 的响应被拒绝。

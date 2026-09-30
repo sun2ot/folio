@@ -14,7 +14,6 @@ import {
   Redo2,
   Settings2,
   ShieldCheck,
-  Sparkles,
   Undo2,
   Upload,
   UserRound,
@@ -32,6 +31,11 @@ import {
   componentRegistry,
   createModule,
   moveModule,
+  dividerLabels,
+  defaultDivider,
+  fonts,
+  type FontId,
+  type DividerKey,
   type Resume,
   type Module,
   type Placement,
@@ -39,7 +43,7 @@ import {
 import { useResume } from './useResume';
 import { download, parseImport } from './storage';
 import { ResumeView, SectionIcon } from './ResumeView';
-import { FontSelect, MediaEditor, ModuleEditor, ProfileEditor } from './Editor';
+import { ColorField, FontSelect, MediaEditor, ModuleEditor, ProfileEditor } from './Editor';
 
 type Tab = 'content' | 'templates' | 'design';
 export default function App() {
@@ -135,6 +139,7 @@ export default function App() {
         'folio-resume.json',
       );
       notify('已导出可编辑数据备份');
+      setExporting(false);
       return;
     }
     if (preview !== doc) {
@@ -142,7 +147,12 @@ export default function App() {
       notify('预览已更新，请确认排版后再次导出');
       return;
     }
-    if (overflow.length) return notify('有模块超出一页，请拆分内容或减小字号后导出');
+    if (overflow.length)
+      return notify(
+        overflow.includes('页脚 / 页码')
+          ? '页脚 / 页码超出底部留白，请缩小字号或缩短内容后导出'
+          : '有模块超出一页，请拆分内容或减小字号后导出',
+      );
     setBusy('正在准备字体和图片…');
     try {
       const api = await import('./export');
@@ -361,31 +371,22 @@ export default function App() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="GitHub 仓库，作者 sun2ot"
+                title="GitHub 仓库 · sun2ot"
               >
                 <Github size={17} aria-hidden="true" />
-                <span>sun2ot 作者</span>
               </a>
               <a
                 href="https://abdc.net.cn"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="sun2ot 的博客 abdc.net.cn"
+                title="作者博客 · abdc.net.cn"
               >
                 <Globe size={17} aria-hidden="true" />
-                <span>博客</span>
               </a>
             </div>
-            <div className="privacy-icon">
-              <ShieldCheck size={19} />
-            </div>
-            <strong>你的数据，只属于你</strong>
-            <p>
-              简历仅保存在当前浏览器中。
-              <br />
-              建议定期导出 JSON 备份。
-            </p>
-            <button className="text-button" onClick={() => void exportFile('json')}>
-              备份我的数据 <ArrowDownToLine size={12} />
+            <button className="small-button backup-button" onClick={() => void exportFile('json')}>
+              <ArrowDownToLine size={14} /> 备份我的数据
             </button>
           </div>
         </aside>
@@ -413,12 +414,18 @@ export default function App() {
             ) : selected === 'profile' || !item ? (
               <ProfileEditor
                 profile={doc.profile}
+                theme={doc.theme}
                 onChange={(profile) => update((p) => ({ ...p, profile }), true)}
                 notify={notify}
               />
             ) : (
               <>
-                <ModuleEditor key={item.id} item={item} onChange={(m) => changeModule(m, true)} />
+                <ModuleEditor
+                  key={item.id}
+                  item={item}
+                  theme={doc.theme}
+                  onChange={(m) => changeModule(m, true)}
+                />
                 <button
                   className="delete-button"
                   disabled={doc.modules.length <= 1}
@@ -436,9 +443,7 @@ export default function App() {
           {tab === 'templates' && (
             <div className="editor-fields">
               <div className="panel-intro">
-                <span className="eyebrow">A FRAME FOR YOUR STORY</span>
-                <h2>选择你的风格</h2>
-                <p>同一份经历，多一种表达。切换模板保留内容与字体。</p>
+                <h2>模板</h2>
               </div>
               {(
                 [
@@ -476,51 +481,55 @@ export default function App() {
                   )}
                 </button>
               ))}
-              <p className="hint">模板决定整体视觉与初始栏宽，模块宽度仍可单独调整。</p>
             </div>
           )}
           {tab === 'design' && (
             <div className="editor-fields">
               <div className="panel-intro">
-                <span className="eyebrow">MAKE IT YOURS</span>
-                <h2>细节，定义风格</h2>
-                <p>A4 标准纸张 · 统一预览与导出排版</p>
+                <h2>样式</h2>
               </div>
-              <div className="field">
-                <span>主题色（姓名、模块标题与正文的默认颜色）</span>
-                <div className="swatches">
-                  {[
-                    '#25332f',
-                    '#315b50',
-                    '#2c466b',
-                    '#343434',
-                    '#7d4651',
-                    '#866339',
-                    '#61517c',
-                  ].map((color) => (
-                    <button
-                      key={color}
-                      aria-label={`主题色 ${color}`}
-                      className={doc.theme.textColor === color ? 'active' : ''}
-                      style={{ background: color }}
-                      onClick={() => patchTheme({ textColor: color })}
-                    >
-                      {doc.theme.textColor === color && <Check size={15} />}
-                    </button>
-                  ))}
-                  <input
-                    aria-label="自定义主题色"
-                    type="color"
-                    value={doc.theme.textColor}
-                    onChange={(e) => patchTheme({ textColor: e.target.value })}
-                  />
-                </div>
-                <p className="hint">
-                  模块与基本信息里的单独颜色会覆盖这里；未单独设置的元素跟随主题色。
-                </p>
+              <div>
+                <ColorField
+                  label="全局标题颜色"
+                  value={doc.theme.titleColor || doc.theme.textColor}
+                  fallback={doc.theme.textColor}
+                  inherit={false}
+                  presets={[
+                    { color: '#7c191e', name: '顺圣' },
+                    { color: '#c67915', name: '拓黄' },
+                    { color: '#b6a014', name: '苍黄' },
+                    { color: '#2a6e3f', name: '官绿' },
+                    { color: '#007175', name: '青雘' },
+                    { color: '#06436f', name: '蓝采和' },
+                    { color: '#422256', name: '凝夜紫' },
+                  ]}
+                  onChange={(titleColor) => patchTheme({ titleColor })}
+                />
+                <ColorField
+                  label="全局正文颜色"
+                  value={doc.theme.textColor}
+                  fallback={doc.theme.textColor}
+                  inherit={false}
+                  presets={[
+                    { color: '#000000', name: '黑色' },
+                    { color: '#003460', name: '帝释青' },
+                    { color: '#1e2732', name: '瑾瑜' },
+                    { color: '#31322c', name: '京元' },
+                    { color: '#422517', name: '青骊' },
+                    { color: '#13393e', name: '螺子黛' },
+                    { color: '#420b2f', name: '油紫' },
+                  ]}
+                  onChange={(textColor) =>
+                    patchTheme({
+                      textColor,
+                      titleColor: doc.theme.titleColor || doc.theme.textColor,
+                    })
+                  }
+                />
               </div>
+              <p className="hint">局部颜色覆盖全局设置。</p>
               <label className="field">
-                <span>姓名与个人信息字体</span>
+                <span>全局字体</span>
                 <FontSelect
                   label="全局字体"
                   value={doc.theme.font}
@@ -538,14 +547,94 @@ export default function App() {
                 />
               </label>
               <details className="style-details" open>
+                <summary>分割线</summary>
+                {(Object.entries(dividerLabels) as [DividerKey, string][])
+                  .filter(([key]) => key !== 'stripe' || doc.theme.template === 'compact')
+                  .map(([key, label]) => {
+                    const preset = defaultDivider(doc.theme.template, key);
+                    const divider = doc.theme.dividers?.[key];
+                    const patch = (value: { color?: string; width?: number }) =>
+                      patchTheme({
+                        dividers: { ...doc.theme.dividers, [key]: { ...divider, ...value } },
+                      });
+                    return (
+                      <div className="divider-setting" key={key}>
+                        <span>{label}</span>
+                        <div className="divider-controls">
+                          <ColorField
+                            compact
+                            inherit={false}
+                            label={`${label}颜色`}
+                            value={divider?.color || ''}
+                            fallback={preset.color}
+                            onChange={(color) => patch({ color })}
+                          />
+                          <label className="divider-width">
+                            <input
+                              type="number"
+                              aria-label={`${label}粗细`}
+                              min="0"
+                              max="12"
+                              step="0.5"
+                              value={divider?.width ?? preset.width}
+                              onChange={(e) => {
+                                if (e.target.value !== '')
+                                  patch({ width: Math.max(0, Math.min(12, +e.target.value)) });
+                              }}
+                            />
+                            <span>px</span>
+                          </label>
+                          <button
+                            className="small-button"
+                            aria-label={`${label}恢复模板默认`}
+                            disabled={!divider?.color && divider?.width === undefined}
+                            onClick={() => {
+                              const dividers = { ...doc.theme.dividers };
+                              delete dividers[key];
+                              patchTheme({ dividers });
+                            }}
+                          >
+                            重置
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                <p className="hint">粗细设为 0 可隐藏，重置后使用模板默认值。</p>
+              </details>
+              <details className="style-details" open>
                 <summary>页眉与页脚</summary>
                 {(
                   [
-                    ['headerVisible', '显示页眉', 'headerText', '页眉内容', 200],
-                    ['footerVisible', '显示页脚标识', 'footerText', '页脚标识 / ID', 100],
-                    ['pageNumberVisible', '显示页码', 'pageNumberFormat', '页码格式', 60],
+                    [
+                      'headerVisible',
+                      '显示页眉',
+                      'headerText',
+                      '页眉内容',
+                      200,
+                      'headerStyle',
+                      '页眉',
+                    ],
+                    [
+                      'footerVisible',
+                      '显示页脚标识',
+                      'footerText',
+                      '页脚标识 / ID',
+                      100,
+                      'footerStyle',
+                      '页脚',
+                    ],
+                    [
+                      'pageNumberVisible',
+                      '显示页码',
+                      'pageNumberFormat',
+                      '页码格式',
+                      60,
+                      'pageNumberStyle',
+                      '页码',
+                    ],
                   ] as const
-                ).map(([visible, label, key, contentLabel, max]) => (
+                ).map(([visible, label, key, contentLabel, max, styleKey, styleLabel]) => (
                   <div key={key}>
                     <label className="check-field">
                       <input
@@ -563,30 +652,82 @@ export default function App() {
                         onChange={(e) => patchDecoration({ [key]: e.target.value })}
                       />
                     </label>
+                    <div className="field decoration-setting">
+                      <div className="decoration-heading">
+                        <span>{styleLabel}样式</span>
+                        <button
+                          className="small-button"
+                          aria-label={`${styleLabel}恢复默认样式`}
+                          disabled={
+                            !Object.values(doc.pageDecoration[styleKey] || {}).some(
+                              (v) => v !== undefined && v !== '',
+                            )
+                          }
+                          onClick={() => patchDecoration({ [styleKey]: {} })}
+                        >
+                          重置
+                        </button>
+                      </div>
+                      <div className="typography-row">
+                        <select
+                          aria-label={`${styleLabel}字体`}
+                          value={doc.pageDecoration[styleKey]?.font || ''}
+                          onChange={(e) =>
+                            patchDecoration({
+                              [styleKey]: {
+                                ...doc.pageDecoration[styleKey],
+                                font: e.target.value ? (e.target.value as FontId) : undefined,
+                              },
+                            })
+                          }
+                        >
+                          <option value="">跟随全局</option>
+                          {Object.entries(fonts).map(([id, name]) => (
+                            <option key={id} value={id}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="font-size-select">
+                          <select
+                            aria-label={`${styleLabel}字号`}
+                            value={doc.pageDecoration[styleKey]?.size ?? 9}
+                            onChange={(e) =>
+                              patchDecoration({
+                                [styleKey]: {
+                                  ...doc.pageDecoration[styleKey],
+                                  size: +e.target.value,
+                                },
+                              })
+                            }
+                          >
+                            {Array.from({ length: 22 }, (_, i) => i + 9).map((size) => (
+                              <option key={size} value={size}>
+                                {size}
+                              </option>
+                            ))}
+                          </select>
+                          <span aria-hidden="true">px</span>
+                        </div>
+                        <ColorField
+                          compact
+                          label={`${styleLabel}颜色`}
+                          value={doc.pageDecoration[styleKey]?.color || ''}
+                          fallback={doc.theme.textColor}
+                          onChange={(color) =>
+                            patchDecoration({
+                              [styleKey]: { ...doc.pageDecoration[styleKey], color },
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
                   </div>
                 ))}
                 <p className="hint">
-                  页码格式可使用 {'{page}'} 表示当前页、{'{pages}'} 表示总页数，例如「第 {'{page}'}{' '}
-                  页 / 共 {'{pages}'} 页」。
+                  {'{page}'} 为当前页，{'{pages}'} 为总页数。
                 </p>
               </details>
-              <div className="tip-card">
-                <Sparkles size={18} />
-                <h3>让内容自然呼吸</h3>
-                <p>保持简洁的段落，用数据凸显成果。适当的留白，让重要信息更容易被看见。</p>
-              </div>
-              <div className="font-note">
-                <strong>开源字体，随项目部署</strong>
-                <p>
-                  中文：思源黑体、思源宋体
-                  <br />
-                  英文：Inter、Source Serif 4<br />
-                  浏览器按 unicode-range 只取需要的分片；
-                  <br />
-                  离线 HTML
-                  也只内嵌正文真正用到的分片与图片，不会打包整套字体。粗体及斜体由浏览器合成。
-                </p>
-              </div>
             </div>
           )}
         </section>
@@ -639,7 +780,15 @@ export default function App() {
           </div>
           {overflow.length > 0 && (
             <div className="overflow-warning" role="alert">
-              “{overflow.join('、')}”超出一页，请拆分模块或缩小字号后导出。
+              {overflow.filter((label) => label !== '页脚 / 页码').length > 0 && (
+                <div>
+                  “{overflow.filter((label) => label !== '页脚 / 页码').join('、')}
+                  ”超出一页，请拆分模块或缩小字号后导出。
+                </div>
+              )}
+              {overflow.includes('页脚 / 页码') && (
+                <div>页脚 / 页码超出底部留白，请缩小字号或缩短内容后导出。</div>
+              )}
             </div>
           )}
           <div className="preview-scroll">
@@ -685,8 +834,7 @@ export default function App() {
       >
         <div className="dialog-heading">
           <div>
-            <span className="eyebrow">READY FOR YOUR NEXT CHAPTER</span>
-            <h2>带上简历，迈向下一步</h2>
+            <h2>导出简历</h2>
           </div>
           <button
             className="icon-button"
@@ -697,7 +845,7 @@ export default function App() {
             <X size={20} />
           </button>
         </div>
-        <p className="dialog-desc">选择适合你的格式。所有导出都在本地完成。</p>
+        <p className="dialog-desc">所有导出都在本地完成。</p>
         <div className="export-options">
           {(
             [
