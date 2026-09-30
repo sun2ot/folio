@@ -13,6 +13,7 @@ pnpm install --frozen-lockfile
 pnpm test
 pnpm format:check
 pnpm check:tests
+pnpm check:release
 pnpm build
 pnpm exec playwright install chromium
 pnpm test:e2e
@@ -24,28 +25,29 @@ Node.js 22.13+，pnpm 12.6.0。Playwright 使用独立 Chromium 上下文，启�
 
 ## 自动覆盖与文件职责
 
-| 风险或行为                                                  | 验证位置                                    |
-| ----------------------------------------------------------- | ------------------------------------------- |
-| v4 导入、字段唯一性、颜色与图片边界、模板保留内容           | src/model.test.ts                           |
-| 安全 Markdown、嵌套格式和列表                               | src/markdown.test.ts                        |
-| 半宽组行、按内容块分页、续页、手动换页与不可分块溢出        | src/pagination.test.ts                      |
-| 字体 unicode-range 与按需分片筛选                           | src/fonts.test.ts                           |
-| 本地图标白名单、短键保留、中英文检索与未知键拒绝            | src/icons.test.ts                           |
-| GitHub 标识、响应、代理与离线快照失败重试                   | src/repository.test.ts                      |
-| 科研成果可选协议、DOI / URL 安全校验、长度与备份边界        | src/research.test.ts                        |
-| 读取失败不写回、保存失败可重试、40 步历史与输入合并         | src/useResume.test.ts                       |
-| 编辑、保存、模板、模块排序与图标键盘导航                    | tests/editor.spec.ts                        |
-| 默认卡片离线保留、完整图标搜索分页、滚轮与窄屏选择          | tests/icons.spec.ts                         |
-| 信息字段、分层颜色与工作台控件行为                          | tests/profile.spec.ts、tests/design.spec.ts |
-| 真实滚轮、日期地点同行、长链接及经历布局                    | tests/layout.spec.ts                        |
-| 余量利用、整模块开关、有序 / 嵌套列表、双栏续页与导出一致性 | tests/pagination.spec.ts                    |
-| 图片上传失败、取景、缩放拖动、取消、跨页与边界保存          | tests/media.spec.ts                         |
-| 页眉页脚继承、重置、独立显示与溢出阻止导出                  | tests/decoration.spec.ts                    |
-| 三模板分割线覆盖、隐藏、重置及离线 HTML 精确粗细            | tests/dividers.spec.ts                      |
-| 离线卡片、作者头像与备份，解码中的旧头像取消后不覆盖新卡片  | tests/repository\*.spec.ts                  |
-| 科研成果编辑、可选信息、半宽换行、三模板导出与 PDF 链接注释 | tests/research.spec.ts                      |
-| 离线 HTML、JSON、保真 PDF 与原生打印 PDF                    | tests/export.spec.ts                        |
-| 静态包许可文件、子路径图片字体与导出动态模块                | tests/deployment.spec.ts                    |
+| 风险或行为                                                     | 验证位置                                    |
+| -------------------------------------------------------------- | ------------------------------------------- |
+| v4 导入、字段唯一性、颜色与图片边界、模板保留内容              | src/model.test.ts                           |
+| 安全 Markdown、嵌套格式和列表                                  | src/markdown.test.ts                        |
+| 半宽组行、按内容块分页、续页、手动换页与不可分块溢出           | src/pagination.test.ts                      |
+| 字体 unicode-range 与按需分片筛选                              | src/fonts.test.ts                           |
+| 本地图标白名单、短键保留、中英文检索与未知键拒绝               | src/icons.test.ts                           |
+| GitHub 标识、响应、代理与离线快照失败重试                      | src/repository.test.ts                      |
+| 科研成果可选协议、DOI / URL 安全校验、长度与备份边界           | src/research.test.ts                        |
+| 读取失败不写回、保存失败可重试、40 步历史与输入合并            | src/useResume.test.ts                       |
+| 编辑、保存、模板、模块排序与图标键盘导航                       | tests/editor.spec.ts                        |
+| 更新日志离线打开、版本顺序、桌面与窄屏滚轮、键盘关闭及焦点恢复 | tests/changelog.spec.ts                     |
+| 默认卡片离线保留、完整图标搜索分页、滚轮与窄屏选择             | tests/icons.spec.ts                         |
+| 信息字段、分层颜色与工作台控件行为                             | tests/profile.spec.ts、tests/design.spec.ts |
+| 真实滚轮、日期地点同行、长链接及经历布局                       | tests/layout.spec.ts                        |
+| 余量利用、整模块开关、有序 / 嵌套列表、双栏续页与导出一致性    | tests/pagination.spec.ts                    |
+| 图片上传失败、取景、缩放拖动、取消、跨页与边界保存             | tests/media.spec.ts                         |
+| 页眉页脚继承、重置、独立显示与溢出阻止导出                     | tests/decoration.spec.ts                    |
+| 三模板分割线覆盖、隐藏、重置及离线 HTML 精确粗细               | tests/dividers.spec.ts                      |
+| 离线卡片、作者头像与备份，解码中的旧头像取消后不覆盖新卡片     | tests/repository\*.spec.ts                  |
+| 科研成果编辑、可选信息、半宽换行、三模板导出与 PDF 链接注释    | tests/research.spec.ts                      |
+| 离线 HTML、JSON、保真 PDF 与原生打印 PDF                       | tests/export.spec.ts                        |
+| 静态包许可文件、子路径图片字体与导出动态模块                   | tests/deployment.spec.ts                    |
 
 所有网络用例拦截 GitHub 与头像响应，只访问本地应用和本次导出文件。测试数据使用仓库示例、内置卡通头像或生成色块，不使用个人简历和真实二维码。
 

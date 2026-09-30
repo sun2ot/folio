@@ -16,6 +16,7 @@ pnpm dev
 pnpm test                 # 协议、安全 Markdown、字体分片、GitHub 卡片、分页与布局测试
 pnpm format:check         # 检查统一代码格式
 pnpm check:tests          # 独立检查浏览器测试与 Playwright 配置的类型
+pnpm check:release        # 校验应用版本与倒序更新日志一致
 pnpm snapshot:github      # 预取 github-repos.json 中的公开仓库（可选，需要外网）
 pnpm build                # 严格 TypeScript 检查 + 生产打包
 pnpm exec playwright install chromium
@@ -44,7 +45,7 @@ pnpm preview              # 本地检查 dist 部署产物
 - 颜色分层设置：「样式」分别设置全局标题颜色和全局正文颜色，两者各提供七种中国传统预设色与自定义取色，悬停显示传统色名称。姓名与模块标题（含标题图标）跟随标题颜色；求职意向、每条基本信息（含图标）、模块正文、仓库名称与默认 GitHub 图标跟随正文颜色，各项均可单独取色。模块的字体、字号和颜色在同一行设置，圆形取色按钮显示当前生效颜色，旁边的重置图标恢复「跟随全局」，已继承时置灰。
 - 「样式 → 分割线」分别设置基本信息、模块标题、正文 Markdown 分割线和页脚的颜色与粗细（0–12 px，0 表示隐藏）；构筑模板另支持顶部色带。重置使用当前模板默认值，切换模板保留单独设置，测量、预览与所有导出共用这些样式。
 - 三套模板：青序、书简、构筑。模板切换不修改正文、图片、标题及字体；会重设模块初始栏宽。
-- 侧栏底部显示 GitHub 与博客图标，并保留「备份我的数据」按钮：图标分别指向 `sun2ot/folio` 与 abdc.net.cn，悬停提示和可访问名称保留作者信息。JSON 备份也可从顶栏「导出简历」进入。
+- 侧栏底部显示 GitHub、博客与「更新日志」图标，以及当前应用版本号，并保留「备份我的数据」按钮。更新日志弹窗按版本倒序展示新增、优化与修复，支持滚轮、键盘和 Escape 关闭，内容随应用打包，离线也能查看。GitHub 与博客分别指向 `sun2ot/folio` 与 abdc.net.cn，悬停提示和可访问名称保留作者信息。JSON 备份也可从顶栏「导出简历」进入。
 - 220ms 防抖实时预览，也可手动更新；500ms 防抖自动保存；40 步会话内撤销重做（连续输入合并）。
 - PDF、可离线查看的独立 HTML、完整 JSON 数据导出及校验导入。
 
@@ -100,7 +101,9 @@ pnpm build
 
 `.github/workflows/ci.yml`：推送 `main`、提交 PR 或手动触发。`check` 任务安装依赖后执行单元测试、格式检查、`pnpm check:tests`、仓库快照更新（非 PR；失败保留内置快照）、生产构建与 Playwright Chromium 测试。浏览器测试访问本次 `dist` 的根路径与 `/folio/` 子路径，不复用开发服务；PDF 自动检查 A4、页数、正文非空和第二页图片位置。失败时上传 `test-results/`，其中包含 trace 和 PDF 页面渲染图。
 
-主分支构建成功后，`release` 任务下载构建产物与对应源码，发布 `folio-dist.zip`、`folio-dist.tar.gz`、`folio-source.tar.gz` 和三者的 `SHA256SUMS`。源码归档包含该提交的构建文件、lockfile 和构建时更新的离线快照，以便重建发布产物。标签为 `build-<run_number>-<run_attempt>`，指向 `$GITHUB_SHA`，附带自动生成的变更说明。PR 不发布 Release；静态站点包解压后按上述方式部署。
+主分支构建成功后，`release` 任务下载构建产物与对应源码，发布 `folio-dist.zip`、`folio-dist.tar.gz`、`folio-source.tar.gz` 和三者的 `SHA256SUMS`。源码归档包含该提交的构建文件、lockfile 和构建时更新的离线快照，以便重建发布产物。标签读取 `package.json` 的应用版本，格式为 `v<version>`（当前 `v1.1.0`），指向 `$GITHUB_SHA`；发布说明与页面弹窗共用 `src/changelog.ts` 的当前版本内容。已存在的 Release 会跳过，不覆盖原发布包或移动标签。PR 不发布 Release；静态站点包解压后按上述方式部署。
+
+发布新版本时，同时递增 `package.json.version` 并在 `src/changelog.ts` 顶部加入对应版本、日期和面向用户的说明，重点写新增功能、体验优化与问题修复。`pnpm check:release`（也在构建前自动执行）会检查版本匹配、唯一性和倒序，防止页面与 Release 脱节。当前历史记录根据 6 次提交补记：`0.1.0` → `6b32425`、`0.2.0` → `a0815f5`、`0.3.0` → `0afd731`、`0.3.1` → `07560a7`、`0.3.2` → `08faa73`、`1.0.0` → `42556e6`；这些是回顾里程碑，不代表当时发布过同名标签，也不补建历史标签。应用版本与简历数据协议 v4 独立。
 
 如配置 CSP，至少允许同源脚本与字体、`img-src 'self' data: blob:`、`font-src 'self' data:`，以及动态内联样式（本应用使用 React style 与字体注入）。不要盲目启用阻断内联样式的策略。
 

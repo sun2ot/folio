@@ -25,7 +25,10 @@ import {
   PanelLeftClose,
   Github,
   Globe,
+  History,
 } from 'lucide-react';
+import { version } from '../package.json';
+import { changelog } from './changelog';
 import {
   applyTemplate,
   componentRegistry,
@@ -66,7 +69,9 @@ export default function App() {
     [showEditor, setShowEditor] = useState(true);
   const importRef = useRef<HTMLInputElement>(null),
     drag = useRef<string | null>(null),
-    dialog = useRef<HTMLDialogElement>(null);
+    dialog = useRef<HTMLDialogElement>(null),
+    changelogDialog = useRef<HTMLDialogElement>(null),
+    changelogContent = useRef<HTMLDivElement>(null);
   const notify = useCallback((s: string) => setToast(s), []);
   const onReady = useCallback((n: number, over: string[]) => {
     setCount(n);
@@ -388,7 +393,22 @@ export default function App() {
               >
                 <Globe size={17} aria-hidden="true" />
               </a>
+              <button
+                aria-label="更新日志"
+                title="更新日志"
+                aria-haspopup="dialog"
+                aria-controls="changelog-dialog"
+                onClick={() => {
+                  changelogDialog.current?.showModal();
+                  changelogContent.current?.scrollTo(0, 0);
+                }}
+              >
+                <History size={17} aria-hidden="true" />
+              </button>
             </div>
+            <span className="app-version" aria-label={`当前版本 v${version}`}>
+              v{version}
+            </span>
             <button className="small-button backup-button" onClick={() => void exportFile('json')}>
               <ArrowDownToLine size={14} /> 备份我的数据
             </button>
@@ -826,6 +846,70 @@ export default function App() {
           </div>
         </section>
       </main>
+      <dialog
+        id="changelog-dialog"
+        ref={changelogDialog}
+        className="changelog-dialog"
+        aria-labelledby="changelog-title"
+        aria-describedby="changelog-description"
+        onClick={(e) => {
+          if (e.target !== e.currentTarget) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          if (
+            e.clientX < rect.left ||
+            e.clientX > rect.right ||
+            e.clientY < rect.top ||
+            e.clientY > rect.bottom
+          )
+            e.currentTarget.close();
+        }}
+      >
+        <div className="dialog-heading">
+          <div>
+            <h2 id="changelog-title">更新日志</h2>
+            <p id="changelog-description">Folio 的成长小记 · 当前版本 v{version}</p>
+          </div>
+          <button
+            className="icon-button"
+            aria-label="关闭更新日志"
+            autoFocus
+            onClick={() => changelogDialog.current?.close()}
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <div
+          className="changelog-content"
+          ref={changelogContent}
+          tabIndex={0}
+          aria-label="版本记录"
+        >
+          {changelog.map((entry) => (
+            <article className="changelog-entry" key={entry.version}>
+              <div className="changelog-meta">
+                <h3>v{entry.version}</h3>
+                {entry.version === version && <span className="changelog-badge">当前版本</span>}
+                <time dateTime={entry.date}>{entry.date}</time>
+              </div>
+              <p className="changelog-entry-title">{entry.title}</p>
+              {entry.changes.map((group) => (
+                <div className="changelog-group" key={group.label}>
+                  <h4>{group.label}</h4>
+                  <ul>
+                    {group.items.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              {entry.retrospective && <p className="changelog-note">根据历史提交补记</p>}
+            </article>
+          ))}
+        </div>
+        <p className="changelog-footnote">
+          早期版本号按历史提交补记，用来记录成长，不代表当时发布过同名版本。
+        </p>
+      </dialog>
       <dialog
         ref={dialog}
         className="export-dialog"

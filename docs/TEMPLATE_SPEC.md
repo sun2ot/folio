@@ -4,6 +4,8 @@
 
 可执行约定为 `src/model.ts` 的 `documentSchema`。开发阶段仅接受 version: 4，不迁移 v1–v3；旧 JSON 被拒绝。IndexedDB 使用独立键 `folio.resume.v4`，旧键不会读取或覆盖。所有未知 JSON 经 schema 校验后才能进入应用。
 
+工作台显示的应用版本读取 `package.json.version`，与 `src/changelog.ts` 首条记录及 Release 的 `v<version>` 标签一致；它与本文的简历数据协议版本独立。更新日志只属于工作台，不写入简历文档、模板或导出内容。历史版本按提交补记并标明来源。新增日志无需修改协议或存储键。
+
 顶层字段：
 
 | 字段           | 内容                                         |
