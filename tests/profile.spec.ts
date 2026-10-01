@@ -1,10 +1,127 @@
-import { test, expect } from '@playwright/test';
-import { sample } from '../src/model';
-import { openApp, saved, ready } from './helpers';
+import { test, expect, type Locator } from '@playwright/test';
+import { documentSchema, sample, type Resume } from '../src/model';
+import { exportFile, importDocument, openApp, saved, ready, withOfflineHTML } from './helpers';
+import { assertPDF } from './pdf';
+
+async function assertContactWrapping(root: Locator, fields: Resume['profile']['fields']) {
+  const items = root.locator('.resume-contact-item');
+  await expect(items).toHaveCount(fields.length);
+  for (const [index, field] of fields.entries()) {
+    const item = items.nth(index);
+    await expect(item).toHaveText(`${field.label}：${field.value}`);
+    const layout = await item.evaluate((el, labelLength) => {
+      const text = el.querySelector('span')!;
+      const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+      const rects: DOMRect[] = [];
+      // 导出 HTML 会合并文本节点，按实际字符测量可同时覆盖预览与离线文件。
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        for (let i = 0; i < node.textContent!.length; i++) {
+          const range = document.createRange();
+          range.setStart(node, i);
+          range.setEnd(node, i + 1);
+          rects.push(range.getBoundingClientRect());
+        }
+      }
+      const bounds = el.getBoundingClientRect();
+      return {
+        labelEnd: rects[labelLength].top,
+        valueStart: rects[labelLength + 1].top,
+        valueEnd: rects.at(-1)!.top,
+        contained: rects.every(
+          (rect) =>
+            rect.left >= bounds.left - 1 &&
+            rect.right <= bounds.right + 1 &&
+            rect.top >= bounds.top - 1 &&
+            rect.bottom <= bounds.bottom + 1,
+        ),
+        iconWidth: el.querySelector('svg')?.getBoundingClientRect().width,
+        scale: bounds.width / (el as HTMLElement).offsetWidth,
+      };
+    }, field.label.length);
+    expect(layout.contained, `${field.label} 的全部字符应留在字段内`).toBe(true);
+    if (field.id === 'wrap-email') {
+      expect(Math.abs(layout.valueStart - layout.labelEnd), '邮箱从标签后开始排版').toBeLessThan(1);
+      expect(layout.valueEnd, '邮箱在行末换行').toBeGreaterThan(layout.valueStart);
+      expect(layout.iconWidth! / layout.scale, '换行时图标不缩小').toBeCloseTo(
+        (field.size ?? 12) + 1,
+        0,
+      );
+    }
+  }
+}
 
 test.beforeEach(async ({ page }) => {
   await openApp(page);
 });
+
+for (const template of ['editorial', 'classic', 'compact'] as const) {
+  for (const columns of [1, 2] as const) {
+    test(`${template} ${columns} 列长信息接着标签换行，预览与导出保持完整`, async ({
+      page,
+    }, info) => {
+      const doc = documentSchema.parse({
+        ...sample,
+        name: '信息换行验证',
+        profile: {
+          ...sample.profile,
+          name: '信息换行验证',
+          photo: '',
+          columns,
+          infoWidth: columns === 1 ? 280 : 530,
+          fields: [
+            { id: 'wrap-phone', label: '联系电话', value: '13800000000', icon: 'phone' },
+            {
+              id: 'wrap-email',
+              label: '电子邮箱',
+              value: 'resumecontactcandidate012345@example.test',
+              icon: 'mail',
+              color: '#2f6b4f',
+            },
+            {
+              id: 'wrap-website',
+              label: '个人网站',
+              value: `https://example.test/${'pathsegment'.repeat(15)}`,
+              icon: 'globe',
+            },
+            {
+              id: 'wrap-custom',
+              label: '自定义信息'.repeat(12),
+              value: '联系方式'.repeat(50),
+              icon: 'none',
+            },
+          ],
+        },
+        theme: { ...sample.theme, template },
+        modules: [{ ...sample.modules[0], body: '长信息换行验证，全部文字应完整保留。' }],
+      });
+      await importDocument(page, doc);
+      const preview = page.locator('#resume-pages');
+      await assertContactWrapping(preview, doc.profile.fields);
+      const heights = await page.evaluate(() => [
+        (document.querySelector('.resume-measure .resume-header') as HTMLElement).offsetHeight,
+        (document.querySelector('#resume-pages .resume-header') as HTMLElement).offsetHeight,
+      ]);
+      expect(heights[0]).toBe(heights[1]);
+      await expect(page.getByRole('alert')).toHaveCount(0);
+      await preview.locator('.resume-page').screenshot({ path: info.outputPath('preview.png') });
+      const pdf = await exportFile(page, info, 'pdf', 'profile.pdf');
+      await assertPDF(pdf, 1);
+      const html = await exportFile(page, info, 'html', 'profile.html');
+      await withOfflineHTML(page, html, async (offline) => {
+        await assertContactWrapping(offline.locator('.resume-document'), doc.profile.fields);
+        await offline
+          .locator('.resume-page')
+          .screenshot({ path: info.outputPath('offline-html.png') });
+        await offline.emulateMedia({ media: 'print' });
+        await assertContactWrapping(offline.locator('.resume-document'), doc.profile.fields);
+        const printed = info.outputPath('profile-print.pdf');
+        await offline.pdf({ path: printed, preferCSSPageSize: true, printBackground: true });
+        await assertPDF(printed, 1);
+      });
+    });
+  }
+}
 
 test('信息字段统一字号、单项覆盖与恢复继承，排序和刷新后保留', async ({ page }) => {
   const items = page.locator('#resume-pages .resume-contact-item');
