@@ -369,7 +369,9 @@ export function ProfileEditor({
           onChange={(e) => patch({ infoWidth: +e.target.value })}
         />
       </label>
-      <p className="hint">留空字段不显示；缩窄信息区域可为图片留白。</p>
+      <p className="hint">
+        留空字段不显示；缩窄区域优先收紧列间距，长字段会保留所需宽度，超过纸张可用宽度时换行。
+      </p>
     </div>
   );
 }

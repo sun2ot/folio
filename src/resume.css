@@ -37,7 +37,9 @@
   gap: 24px;
 }
 .resume-identity {
-  min-width: 0;
+  /* 信息宽度优先控制列间留白，内容所需宽度可撑开区域，但不能越过纸张。 */
+  width: max-content;
+  min-width: var(--info-width);
   max-width: 100%;
 }
 .resume-eyebrow {
@@ -67,6 +69,7 @@
 }
 .resume-contact {
   display: grid;
+  justify-content: space-between;
   gap: 8px 18px;
   font-size: 12px;
   color: inherit;
@@ -88,8 +91,6 @@
 }
 .resume-contact-item span {
   min-width: 0;
-  /* 长邮箱和网址从标签后填满当前行，避免整段搬到下一行留下空白。 */
-  word-break: break-all;
 }
 .resume-entry + .resume-entry {
   margin-top: 16px;

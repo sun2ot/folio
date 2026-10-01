@@ -3,13 +3,17 @@ import { documentSchema, sample, type Resume } from '../src/model';
 import { exportFile, importDocument, openApp, saved, ready, withOfflineHTML } from './helpers';
 import { assertPDF } from './pdf';
 
-async function assertContactWrapping(root: Locator, fields: Resume['profile']['fields']) {
+async function assertContactLayout(
+  root: Locator,
+  fields: Resume['profile']['fields'],
+  singleLine: boolean,
+) {
   const items = root.locator('.resume-contact-item');
   await expect(items).toHaveCount(fields.length);
   for (const [index, field] of fields.entries()) {
     const item = items.nth(index);
     await expect(item).toHaveText(`${field.label}：${field.value}`);
-    const layout = await item.evaluate((el, labelLength) => {
+    const layout = await item.evaluate((el) => {
       const text = el.querySelector('span')!;
       const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
       const rects: DOMRect[] = [];
@@ -24,10 +28,10 @@ async function assertContactWrapping(root: Locator, fields: Resume['profile']['f
         }
       }
       const bounds = el.getBoundingClientRect();
+      const content = el.closest('.resume-content')!.getBoundingClientRect();
       return {
-        labelEnd: rects[labelLength].top,
-        valueStart: rects[labelLength + 1].top,
-        valueEnd: rects.at(-1)!.top,
+        firstLine: rects[0].top,
+        lastLine: rects.at(-1)!.top,
         contained: rects.every(
           (rect) =>
             rect.left >= bounds.left - 1 &&
@@ -35,14 +39,21 @@ async function assertContactWrapping(root: Locator, fields: Resume['profile']['f
             rect.top >= bounds.top - 1 &&
             rect.bottom <= bounds.bottom + 1,
         ),
+        withinContent: bounds.left >= content.left - 1 && bounds.right <= content.right + 1,
         iconWidth: el.querySelector('svg')?.getBoundingClientRect().width,
         scale: bounds.width / (el as HTMLElement).offsetWidth,
       };
-    }, field.label.length);
+    });
     expect(layout.contained, `${field.label} 的全部字符应留在字段内`).toBe(true);
-    if (field.id === 'wrap-email') {
-      expect(Math.abs(layout.valueStart - layout.labelEnd), '邮箱从标签后开始排版').toBeLessThan(1);
-      expect(layout.valueEnd, '邮箱在行末换行').toBeGreaterThan(layout.valueStart);
+    expect(layout.withinContent, '字段不得越过纸张正文区域').toBe(true);
+    if (singleLine) {
+      expect(Math.abs(layout.lastLine - layout.firstLine), '缩窄区域时字段仍保持一行').toBeLessThan(
+        1,
+      );
+    } else if (field.id === 'wrap-email') {
+      expect(layout.lastLine, '超过纸张容量的字段仍完整换行').toBeGreaterThan(layout.firstLine);
+    }
+    if (field.icon !== 'none') {
       expect(layout.iconWidth! / layout.scale, '换行时图标不缩小').toBeCloseTo(
         (field.size ?? 12) + 1,
         0,
@@ -56,19 +67,19 @@ test.beforeEach(async ({ page }) => {
 });
 
 for (const template of ['editorial', 'classic', 'compact'] as const) {
-  for (const columns of [1, 2] as const) {
-    test(`${template} ${columns} 列长信息接着标签换行，预览与导出保持完整`, async ({
+  for (const columns of [1, 2, 3] as const) {
+    test(`${template} ${columns} 列缩窄信息区域优先收紧间距，长字段与导出保持一行`, async ({
       page,
     }, info) => {
       const doc = documentSchema.parse({
         ...sample,
-        name: '信息换行验证',
+        name: '信息列宽验证',
         profile: {
           ...sample.profile,
-          name: '信息换行验证',
+          name: '信息列宽验证',
           photo: '',
           columns,
-          infoWidth: columns === 1 ? 280 : 530,
+          infoWidth: 678,
           fields: [
             { id: 'wrap-phone', label: '联系电话', value: '13800000000', icon: 'phone' },
             {
@@ -78,6 +89,77 @@ for (const template of ['editorial', 'classic', 'compact'] as const) {
               icon: 'mail',
               color: '#2f6b4f',
             },
+            {
+              id: 'wrap-age',
+              label: '年龄',
+              value: '23',
+              icon: 'calendar',
+            },
+            {
+              id: 'wrap-origin',
+              label: '籍贯',
+              value: '示例城市',
+              icon: 'map',
+            },
+            { id: 'wrap-site', label: '网站', value: 'https://example.test', icon: 'globe' },
+            { id: 'wrap-degree', label: '学历', value: '本科', icon: 'graduation' },
+          ],
+        },
+        theme: { ...sample.theme, template },
+        modules: [{ ...sample.modules[0], body: '收紧信息列间距，保持长字段完整显示。' }],
+      });
+      await importDocument(page, doc);
+      const preview = page.locator('#resume-pages');
+      await assertContactLayout(preview, doc.profile.fields, true);
+      const columnGap = () =>
+        preview.locator('.resume-contact').evaluate((grid) => {
+          const items = grid.querySelectorAll('.resume-contact-item');
+          return items[1].getBoundingClientRect().left - items[0].getBoundingClientRect().right;
+        });
+      const wideGap = columns > 1 ? await columnGap() : 0;
+      const width = page.getByRole('slider', { name: /信息区域宽度/ });
+      await width.focus();
+      await width.press('Home');
+      await expect(width).toHaveValue('280');
+      await expect(preview.locator('.resume-identity')).toHaveCSS('--info-width', '280px');
+      await ready(page);
+      await assertContactLayout(preview, doc.profile.fields, true);
+      if (columns > 1) {
+        expect(await columnGap(), '缩窄后列间距实际减小').toBeLessThan(wideGap - 1);
+      }
+      // 最长字段可撑开必要宽度，宽度滑块不会把它压进固定等宽列。
+      expect(
+        await preview.locator('.resume-identity').evaluate((el) => el.clientWidth),
+      ).toBeGreaterThan(280);
+      const heights = await page.evaluate(() => [
+        (document.querySelector('.resume-measure .resume-header') as HTMLElement).offsetHeight,
+        (document.querySelector('#resume-pages .resume-header') as HTMLElement).offsetHeight,
+      ]);
+      expect(heights[0]).toBe(heights[1]);
+      await expect(page.getByRole('alert')).toHaveCount(0);
+      await preview.locator('.resume-page').screenshot({ path: info.outputPath('preview.png') });
+      const pdf = await exportFile(page, info, 'pdf', 'profile.pdf');
+      await assertPDF(pdf, 1);
+      const html = await exportFile(page, info, 'html', 'profile.html');
+      await withOfflineHTML(page, html, async (offline) => {
+        await assertContactLayout(offline.locator('.resume-document'), doc.profile.fields, true);
+        await offline
+          .locator('.resume-page')
+          .screenshot({ path: info.outputPath('offline-html.png') });
+        await offline.emulateMedia({ media: 'print' });
+        await assertContactLayout(offline.locator('.resume-document'), doc.profile.fields, true);
+        const printed = info.outputPath('profile-print.pdf');
+        await offline.pdf({ path: printed, preferCSSPageSize: true, printBackground: true });
+        await assertPDF(printed, 1);
+      });
+      const extreme = documentSchema.parse({
+        ...doc,
+        profile: {
+          ...doc.profile,
+          infoWidth: 280,
+          fields: [
+            doc.profile.fields[0],
+            { ...doc.profile.fields[1], value: `${'contact'.repeat(24)}@example.test`, size: 18 },
             {
               id: 'wrap-website',
               label: '个人网站',
@@ -92,33 +174,15 @@ for (const template of ['editorial', 'classic', 'compact'] as const) {
             },
           ],
         },
-        theme: { ...sample.theme, template },
-        modules: [{ ...sample.modules[0], body: '长信息换行验证，全部文字应完整保留。' }],
       });
-      await importDocument(page, doc);
-      const preview = page.locator('#resume-pages');
-      await assertContactWrapping(preview, doc.profile.fields);
-      const heights = await page.evaluate(() => [
-        (document.querySelector('.resume-measure .resume-header') as HTMLElement).offsetHeight,
-        (document.querySelector('#resume-pages .resume-header') as HTMLElement).offsetHeight,
-      ]);
-      expect(heights[0]).toBe(heights[1]);
+      await importDocument(page, extreme);
+      await expect(preview.locator('.resume-contact-item').nth(1)).toHaveText(
+        `电子邮箱：${extreme.profile.fields[1].value}`,
+      );
+      await ready(page);
+      await assertContactLayout(preview, extreme.profile.fields, false);
       await expect(page.getByRole('alert')).toHaveCount(0);
-      await preview.locator('.resume-page').screenshot({ path: info.outputPath('preview.png') });
-      const pdf = await exportFile(page, info, 'pdf', 'profile.pdf');
-      await assertPDF(pdf, 1);
-      const html = await exportFile(page, info, 'html', 'profile.html');
-      await withOfflineHTML(page, html, async (offline) => {
-        await assertContactWrapping(offline.locator('.resume-document'), doc.profile.fields);
-        await offline
-          .locator('.resume-page')
-          .screenshot({ path: info.outputPath('offline-html.png') });
-        await offline.emulateMedia({ media: 'print' });
-        await assertContactWrapping(offline.locator('.resume-document'), doc.profile.fields);
-        const printed = info.outputPath('profile-print.pdf');
-        await offline.pdf({ path: printed, preferCSSPageSize: true, printBackground: true });
-        await assertPDF(printed, 1);
-      });
+      await preview.locator('.resume-page').screenshot({ path: info.outputPath('extreme.png') });
     });
   }
 }

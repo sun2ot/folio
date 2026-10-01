@@ -57,7 +57,10 @@ const Profile = memo(function Profile({ doc }: { doc: Resume }) {
   const p = doc.profile;
   return (
     <header className="resume-header">
-      <div className="resume-identity" style={{ width: p.infoWidth }}>
+      <div
+        className="resume-identity"
+        style={{ '--info-width': `${p.infoWidth}px` } as CSSProperties}
+      >
         {doc.pageDecoration.headerVisible && (
           <div className="resume-eyebrow" style={decorationStyle(doc.pageDecoration.headerStyle)}>
             {doc.pageDecoration.headerText}
@@ -75,7 +78,7 @@ const Profile = memo(function Profile({ doc }: { doc: Resume }) {
         <div
           className="resume-contact"
           style={{
-            gridTemplateColumns: `repeat(${p.columns}, minmax(0, 1fr))`,
+            gridTemplateColumns: `repeat(${p.columns}, minmax(0, max-content))`,
             fontSize: p.infoSize,
           }}
         >
